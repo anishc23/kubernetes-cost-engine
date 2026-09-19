@@ -1,0 +1,22 @@
+# A small, fast configuration used by `make experiment-smoke` and by CI.
+#
+# It exists so that a change to the engine can be checked against the experiment
+# pipeline in seconds rather than minutes. It is not a source of reported results.
+name: smoke
+description: Fast pipeline check; not a source of reported results.
+
+workloads: [stable-cpu, bursty-cpu, bursty-memory]
+cpu_strategies:    [p95, max]
+memory_strategies: [p95, max]
+observation_windows: [6h]
+safety_factors: [1.0, 1.25]
+seeds: 2
+base_seed: 1
+trace_duration: 24h
+step: 60s
+evaluation_horizon: 6h
+percentile_method: linear
+feasibility:
+  max_oom_kills: 0
+  max_cpu_throttle_fraction: 0.01
+cost_instance: m5.xlarge

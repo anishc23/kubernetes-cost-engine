@@ -1,0 +1,36 @@
+# Safety-factor sensitivity: the savings/risk trade-off curve (RQ5).
+#
+# A fine grid of safety factors against the two shipped strategies, so that the
+# trade-off between savings and reliability can be plotted as a curve rather than
+# asserted from three points. Memory safety factors vary independently of CPU
+# ones, because the shape of the curve is expected to differ between a resource
+# whose failure is throttling and one whose failure is a kill.
+name: sensitivity
+description: >
+  Savings, utilisation and failure rate as a function of the CPU and memory
+  safety factors.
+
+workloads: []
+
+cpu_strategies:    [p95, p99]
+memory_strategies: [p95, max]
+
+observation_windows: [24h]
+
+safety_factors:       [1.0, 1.1, 1.2, 1.3, 1.4, 1.5, 1.75, 2.0]
+memory_safety_factors: [1.0, 1.1, 1.2, 1.3, 1.4, 1.5, 1.75, 2.0]
+
+seeds: 5
+base_seed: 20250903
+
+trace_duration: 96h
+step: 30s
+evaluation_horizon: 24h
+
+percentile_method: linear
+
+feasibility:
+  max_oom_kills: 0
+  max_cpu_throttle_fraction: 0.01
+
+cost_instance: m5.xlarge

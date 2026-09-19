@@ -1,0 +1,25 @@
+# Estimator sensitivity: linear interpolation versus nearest rank.
+#
+# The two estimators differ most on short windows, where a p99 is computed from
+# few samples: linear interpolation returns a value between the two largest
+# observations, while nearest rank returns one the workload actually reached. This
+# is a methodological question that most cost tooling leaves implicit, and it
+# bears directly on how the window results should be read.
+name: percentile_method_nearest_rank
+description: Nearest-rank percentile estimator, for comparison against the linear default.
+
+workloads: []
+cpu_strategies:    [p95, p99]
+memory_strategies: [p95, p99]
+observation_windows: [1h, 6h, 24h]
+safety_factors: [1.15]
+seeds: 10
+base_seed: 20250902        # matches windows.yaml
+trace_duration: 168h
+step: 30s
+evaluation_horizon: 12h
+percentile_method: nearest-rank
+feasibility:
+  max_oom_kills: 0
+  max_cpu_throttle_fraction: 0.01
+cost_instance: m5.xlarge
