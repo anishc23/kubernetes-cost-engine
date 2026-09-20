@@ -93,7 +93,7 @@ waste exists; a single uniform factor would make that question trivial.
 | `validate_default.yaml` | 600 | confirmatory run of the revised default |
 | `smoke.yaml` | 48 | fast pipeline check; not a source of results |
 
-**48,248 scored conditions**, each averaging 10 (or 5) independent trace
+**49,800 scored conditions**, each averaging 10 (or 5) independent trace
 realisations evaluated on a held-out horizon.
 
 Total runtime is under two minutes on a laptop, which is a deliberate property:

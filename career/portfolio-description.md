@@ -14,7 +14,7 @@ Ready-to-use descriptions at several lengths. Every number is measured.
 ## Short (GitHub description, ~250 characters)
 
 > Kubernetes resource right-sizing with resource-specific CPU/memory policies and
-> OOM-aware safety gates, plus a reproducible ground-truth study of 48,248
+> OOM-aware safety gates, plus a reproducible ground-truth study of 49,800
 > conditions showing that reliability constraints reverse the strategy ranking.
 
 ---
@@ -32,7 +32,7 @@ Ready-to-use descriptions at several lengths. Every number is measured.
 > and an OOMKilled container never records the memory it was reaching for.
 >
 > So I built a generative workload simulator with known ground truth and scored
-> recommendations against demand the engine never saw. Across 48,248 conditions,
+> recommendations against demand the engine never saw. Across 49,800 conditions,
 > adding a reliability constraint *reverses* the ranking of strategies — and my own
 > default policy turned out to leave 34% of demanded CPU work unserved on bursty
 > workloads, so I replaced it with one the data supported.
@@ -68,7 +68,7 @@ Ready-to-use descriptions at several lengths. Every number is measured.
 > relative to p95 and p99. The production system and the research framework run the
 > same recommendation engine, so the findings are about the deployed code.
 >
-> Across 48,248 scored conditions, several results surprised me. Adding a
+> Across 49,800 scored conditions, several results surprised me. Adding a
 > reliability constraint *reverses* the strategy ranking — mean-based policies lead
 > on raw savings and deliver zero savings that survive the constraint. No percentile
 > below the maximum is universally safe, because the safe percentile depends on the

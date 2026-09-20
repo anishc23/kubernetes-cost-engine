@@ -61,7 +61,7 @@ invalidating the workload-class findings.
 
 ## Principal findings
 
-Across 48,248 scored conditions:
+Across 49,800 scored conditions:
 
 1. **An explicit reliability constraint reverses the ranking of strategies.**
    Mean- and median-based policies lead on raw savings (69%) and deliver *zero*

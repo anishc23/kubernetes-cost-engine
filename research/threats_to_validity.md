@@ -187,7 +187,7 @@ tests. They describe variation across realisations of a synthetic process.
 
 Each condition shares its trace with other conditions evaluating different
 strategies on the same seed — which is intentional, since paired comparisons are
-stronger — but it means the 48,248 records are not 48,248 independent samples. The
+stronger — but it means the 49,800 records are not 49,800 independent samples. The
 effective sample size for any single comparison is the number of seeds, which is
 ten.
 

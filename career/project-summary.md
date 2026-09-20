@@ -18,7 +18,7 @@ question — how would you know whether such a recommendation was *good*? — wh
 hard because the usage data available to evaluate a recommendation is censored by
 the configuration being evaluated. It contributes a ground-truth evaluation
 methodology (generative workloads, counterfactual replay against held-out demand),
-a reproducible benchmark of 48,248 scored conditions, and a tested Go
+a reproducible benchmark of 49,800 scored conditions, and a tested Go
 implementation whose production and research paths share one recommendation
 engine.
 
@@ -141,7 +141,7 @@ sensitivity analysis, threats-to-validity analysis, technical writing.
 
 ```bash
 make test          # unit, property, fake-cluster and chart tests
-make experiments   # 48,248 conditions, ~2 minutes
+make experiments   # 49,800 conditions, ~2 minutes
 make analysis      # every figure and table
 make kind-e2e      # end-to-end on a real cluster
 ```

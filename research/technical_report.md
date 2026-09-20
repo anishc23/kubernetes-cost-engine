@@ -20,7 +20,7 @@ We address this with generative ground truth and counterfactual replay. Syntheti
 workloads are generated from known demand models; the recommendation engine sees
 only a censored observation of a fitting window, and its output is replayed against
 uncensored demand over a *held-out* horizon. We evaluate seven strategies across ten
-workload classes, four safety margins and four observation windows, for 48,248
+workload classes, four safety margins and four observation windows, for 49,800
 scored conditions, using the same engine that the production controller runs.
 
 Four findings stand out. First, applying an explicit reliability constraint
@@ -72,7 +72,7 @@ developed in §3, and answering it properly changes which strategies look best.
 2. **A reproducible benchmark**: ten generative workload classes with known
    structure, seeded, provenance-stamped, with the evaluation harness decoupled from
    the recommender so another engine could be compared on identical terms (§5).
-3. **An empirical study** of 48,248 conditions, reporting savings alongside the
+3. **An empirical study** of 49,800 conditions, reporting savings alongside the
    degradation and failures that produced them (§7).
 4. **An implementation**: a tested Go engine, Kubernetes controller, Prometheus
    integration, REST API, Helm chart and CLI, sharing one recommendation code path
@@ -408,7 +408,7 @@ expressive function approximator, and both are made harder to diagnose by one.
 
 ```bash
 make test          # unit, integration and property tests
-make experiments   # 48,248 conditions, ~2 minutes
+make experiments   # 49,800 conditions, ~2 minutes
 make analysis      # every figure and table in this report
 make kind-e2e      # end-to-end validation on a real cluster
 ```

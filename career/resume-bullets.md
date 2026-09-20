@@ -19,7 +19,7 @@ wherever they appear.
 >   under test; designed a ground-truth methodology using generative workloads and
 >   counterfactual replay against a held-out horizon.
 > - Evaluated 7 right-sizing strategies across 10 controlled workload classes, 4
->   safety margins and 4 observation windows — 48,248 scored conditions — finding
+>   safety margins and 4 observation windows — 49,800 scored conditions — finding
 >   that an explicit reliability constraint *reverses* the strategy ranking:
 >   mean-based policies lead on raw savings (69%) and yield zero savings that meet
 >   the constraint.
@@ -39,7 +39,7 @@ wherever they appear.
 
 > Designed a ground-truth evaluation methodology for Kubernetes resource
 > right-sizing, addressing the censoring of usage data by the configuration under
-> test; ran 48,248 controlled conditions showing that an explicit reliability
+> test; ran 49,800 controlled conditions showing that an explicit reliability
 > constraint reverses the ranking of percentile strategies, and that the project's
 > own default policy left 34% of demanded CPU work unserved on bursty workloads.
 
@@ -73,7 +73,7 @@ wherever they appear.
 > Built a Go-based Kubernetes resource right-sizing engine using client-go and
 > Prometheus, with resource-specific CPU/memory policies, OOM-aware safety gating,
 > least-privilege RBAC and a Helm chart; validated end-to-end on kind and evaluated
-> experimentally across 48,248 controlled conditions.
+> experimentally across 49,800 controlled conditions.
 
 ---
 
@@ -87,7 +87,7 @@ wherever they appear.
 >   it as a constrained optimisation rather than a single objective — because a
 >   weighted score would require an indefensible exchange rate between dollars and
 >   outages.
-> - Ran a controlled study of 48,248 conditions with statistically rigorous
+> - Ran a controlled study of 49,800 conditions with statistically rigorous
 >   aggregation (medians with percentile-bootstrap intervals, Wilson intervals for
 >   proportions), deliberately avoiding significance testing where the
 >   distributional assumptions would not hold and documenting why.
@@ -105,7 +105,7 @@ wherever they appear.
 **Shorter (2 lines):**
 
 > Built a Go system quantifying the cost–reliability trade-off in Kubernetes
-> resource allocation as a constrained optimisation; ran 48,248 controlled
+> resource allocation as a constrained optimisation; ran 49,800 controlled
 > experiments with bootstrap-interval analysis, measuring the price of universal
 > reliability at ~46 percentage points of achievable savings.
 
@@ -115,7 +115,7 @@ wherever they appear.
 
 | Claim | Source |
 |---|---|
-| 48,248 scored conditions | sum of records across `experiments/results/*.csv` |
+| 49,800 scored conditions | sum of records across `experiments/results/*.csv` |
 | ~6,500 lines implementation, ~3,500 tests | `find . -name '*.go' \| xargs wc -l` |
 | p95 leaves 34% of demanded CPU work unserved on bursty-cpu | `research/results.md`, Finding 2.3 |
 | Memory max × 1.0 survives 47% of conditions | Finding 3.1 |

@@ -68,7 +68,7 @@ over a held-out period it never saw**.
 
 ## What the experiments found
 
-48,248 scored conditions across ten workload classes, seven strategies, four
+49,800 scored conditions across ten workload classes, seven strategies, four
 safety margins and four observation windows. [Full results](research/results.md).
 
 | Finding | Evidence |
@@ -154,7 +154,7 @@ measurable rather than invisible.
 ### Look at the research without installing anything
 
 ```bash
-make experiments   # 48,248 conditions, ~2 minutes
+make experiments   # 49,800 conditions, ~2 minutes
 make analysis      # every figure and table in the report
 ```
 

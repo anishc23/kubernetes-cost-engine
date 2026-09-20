@@ -15,12 +15,25 @@ that does and does not license is set out in
 [threats_to_validity.md](threats_to_validity.md), and the reader is asked to hold
 that caveat over every number below.
 
-**Experimental volume.** 48,248 conditions across nine configurations: 19,600 in
-the main strategy comparison, 12,800 in the sensitivity analysis, 3,600 each for
-observation windows and the OOM ablation, 3,200 for the no-gates ablation, 2,000
-for the unified-strategy ablation, 1,600 each for the two OOM-recovery runs, 1,200
-for the estimator comparison and 600 for the default validation. Each condition is
-10 (or 5) independent trace realisations scored on a held-out horizon.
+**Experimental volume.** 49,800 scored conditions across ten configurations:
+
+| Configuration | Conditions |
+|---|---:|
+| `main` — strategies x classes x margins | 19,600 |
+| `sensitivity` — fine margin sweep, CPU and memory decoupled | 12,800 |
+| `windows` — observation window and stability | 3,600 |
+| `ablation_no_oom_protection` — first attempt; measured nothing | 3,600 |
+| `ablation_no_gates` — raw statistics only | 3,200 |
+| `ablation_unified_strategy` — one shared strategy | 2,000 |
+| `oom_recovery` — corrected OOM ablation | 1,600 |
+| `oom_recovery_no_gate` — its paired control | 1,600 |
+| `percentile_method_nearest_rank` — estimator sensitivity | 1,200 |
+| `validate_default` — confirmatory run of the revised default | 600 |
+| **Total** | **49,800** |
+
+The `smoke` configuration (48 conditions) is excluded: it is a pipeline check, not
+a source of reported results. Each condition aggregates 10 independent trace
+realisations (5 for the sensitivity sweep), each scored on a held-out horizon.
 
 ---
 
