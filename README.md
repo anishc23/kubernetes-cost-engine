@@ -1,5 +1,9 @@
 # Kubernetes Cost Optimization Engine
 
+[![CI](https://github.com/anishc23/kubernetes-cost-engine/actions/workflows/ci.yml/badge.svg)](https://github.com/anishc23/kubernetes-cost-engine/actions/workflows/ci.yml)
+[![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
+[![Go](https://img.shields.io/badge/Go-1.27-00ADD8?logo=go&logoColor=white)](go.mod)
+
 **A resource right-sizing system for Kubernetes, and a ground-truth study of
 whether right-sizing recommendations can be trusted.**
 
@@ -274,5 +278,6 @@ Research prototype with a production-shaped implementation: tested at every leve
 (unit, property, fake-cluster, chart-render, end-to-end on kind), instrumented,
 and deployable. Not validated in production.
 
-Go 1.27 · Apache 2.0 · Contributions welcome — see
-[CONTRIBUTING.md](CONTRIBUTING.md)
+Licensed under the [Apache License 2.0](LICENSE). Contributions welcome — see
+[CONTRIBUTING.md](CONTRIBUTING.md); the most valuable kind is evidence that
+contradicts the findings.
