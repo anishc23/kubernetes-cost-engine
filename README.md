@@ -114,15 +114,15 @@ Real output, from a real cluster (kind + Prometheus + synthetic load generators)
 $ koctl recommend --namespace demo
 
 NAMESPACE  WORKLOAD        CONTAINER  CPU NOW  CPU REC  CPU   MEM NOW  MEM REC  MEM   RISK  $/MO SAVED
-demo       idle            app        500m     40m      down  512Mi    95Mi     down  LOW   24.71
-demo       bursty-cpu      app        1500m    640m     down  1Gi      409Mi    down  LOW   22.67
-demo       stable-cpu      app        1        250m     down  1Gi      329Mi    down  LOW   20.18
-demo       growing-memory  app        500m     140m     down  1Gi      735Mi    down  LOW    9.57
+demo       bursty-cpu      app        600m     250m     down  384Mi    158Mi    down  LOW     9.16
+demo       growing-memory  app        250m     80m      down  512Mi    439Mi    down  LOW     4.36
+demo       stable-cpu      app        200m     60m      down  384Mi    128Mi    down  LOW     4.09
+demo       idle            app        100m     40m      down  192Mi    75Mi     down  LOW     3.54
 
-Allocation-based estimate over 4 workloads (policy c11c76cb86cf)
-  current:     $108.62/month
-  recommended: $31.49/month
-  savings:     $77.13/month (71.0%)
+Allocation-based estimate over 4 workloads (policy 74988bf37df2)
+  current:     $34.93/month
+  recommended: $13.77/month
+  savings:     $21.16/month (60.6%)
   decisions:   8 decrease, 0 increase, 0 no change, 0 blocked, 0 insufficient data
 
 This prices reserved capacity, not cloud invoices. A saving is realised only when

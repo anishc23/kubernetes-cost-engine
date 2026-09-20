@@ -195,11 +195,15 @@ func TestDeclaredRequestsMatchTheManifests(t *testing.T) {
 	var res workloadsResponse
 	getJSON(t, apiBase()+"/api/v1/workloads?namespace=demo", &res)
 
+	// These mirror examples/workloads/demo-workloads.yaml. They are duplicated
+	// deliberately: the point of the assertion is that what the engine reports
+	// matches what the manifest declares, so reading both from the same source
+	// would make it vacuous.
 	want := map[string]struct{ cpu, mem string }{
-		"stable-cpu":     {"1", "1Gi"},
-		"bursty-cpu":     {"1500m", "1Gi"},
-		"growing-memory": {"500m", "1Gi"},
-		"idle":           {"500m", "512Mi"},
+		"stable-cpu":     {"200m", "384Mi"},
+		"bursty-cpu":     {"600m", "384Mi"},
+		"growing-memory": {"250m", "512Mi"},
+		"idle":           {"100m", "192Mi"},
 	}
 	for _, w := range res.Workloads {
 		exp, ok := want[w.Name]
@@ -465,10 +469,10 @@ func TestDefaultDeploymentDoesNotMutateWorkloads(t *testing.T) {
 	// These are the values from the manifest. If the optimizer had applied its
 	// own recommendations, they would differ.
 	want := map[string]string{
-		"stable-cpu":     "1",
-		"bursty-cpu":     "1500m",
-		"growing-memory": "500m",
-		"idle":           "500m",
+		"stable-cpu":     "200m",
+		"bursty-cpu":     "600m",
+		"growing-memory": "250m",
+		"idle":           "100m",
 	}
 	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
 		name, got, ok := strings.Cut(line, "=")

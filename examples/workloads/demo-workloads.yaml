@@ -9,6 +9,13 @@
 # machinery. It does not provide ground truth — the cluster interferes with what
 # the generator achieves — which is why the quantitative findings come from the
 # simulation study instead. See research/experimental_setup.md.
+#
+# Sizing note: the absolute values are small — about 1.2 cores of requests across
+# every workload — so the set fits on a 2-core machine, which is what a CI runner
+# and most laptops provide. The *over-provisioning ratios* are what the demo needs
+# to be meaningful, and those are preserved: 5x on stable-cpu, 5x on bursty-cpu,
+# 5x on growing-memory and 20x on idle. An earlier version requested four cores
+# and scheduled only on large machines.
 apiVersion: v1
 kind: Namespace
 metadata:
@@ -34,15 +41,15 @@ spec:
           imagePullPolicy: IfNotPresent
           args:
             - --mode=stable-cpu
-            - --baseline-cpu-milli=200
-            - --baseline-memory-mib=256
+            - --baseline-cpu-milli=40
+            - --baseline-memory-mib=96
             - --addr=:8081
           ports: [{ containerPort: 8081 }]
           resources:
-            # 5x over-provisioned on CPU, 4x on memory: the engine should find
+            # 5x over-provisioned on CPU, ~4x on memory: the engine should find
             # this easily, and if it does not, something upstream is broken.
-            requests: { cpu: "1", memory: 1Gi }
-            limits:   { cpu: "1", memory: 1Gi }
+            requests: { cpu: 200m, memory: 384Mi }
+            limits:   { cpu: 200m, memory: 384Mi }
           readinessProbe:
             httpGet: { path: /healthz, port: 8081 }
             initialDelaySeconds: 3
@@ -73,18 +80,18 @@ spec:
           imagePullPolicy: IfNotPresent
           args:
             - --mode=bursty-cpu
-            - --baseline-cpu-milli=80
-            - --burst-cpu-milli=800
+            - --baseline-cpu-milli=30
+            - --burst-cpu-milli=300
             # Compressed relative to the simulator catalog (30s every 15m) so
             # that a short test run still observes several bursts.
             - --burst-duration=20s
             - --burst-interval=2m
-            - --baseline-memory-mib=320
+            - --baseline-memory-mib=120
             - --addr=:8081
           ports: [{ containerPort: 8081 }]
           resources:
-            requests: { cpu: "1500m", memory: 1Gi }
-            limits:   { cpu: "1500m", memory: 1Gi }
+            requests: { cpu: 600m, memory: 384Mi }
+            limits:   { cpu: 600m, memory: 384Mi }
           readinessProbe:
             httpGet: { path: /healthz, port: 8081 }
             initialDelaySeconds: 3
@@ -115,15 +122,15 @@ spec:
           imagePullPolicy: IfNotPresent
           args:
             - --mode=growing-memory
-            - --baseline-cpu-milli=100
-            - --baseline-memory-mib=200
+            - --baseline-cpu-milli=50
+            - --baseline-memory-mib=120
             - --growth-factor=2.0
             - --duration=30m
             - --addr=:8081
           ports: [{ containerPort: 8081 }]
           resources:
-            requests: { cpu: 500m, memory: 1Gi }
-            limits:   { cpu: 500m, memory: 1Gi }
+            requests: { cpu: 250m, memory: 512Mi }
+            limits:   { cpu: 250m, memory: 512Mi }
           readinessProbe:
             httpGet: { path: /healthz, port: 8081 }
             initialDelaySeconds: 3
@@ -156,15 +163,14 @@ spec:
           args:
             - --mode=idle
             - --baseline-cpu-milli=5
-            - --baseline-memory-mib=32
+            - --baseline-memory-mib=24
             - --addr=:8081
           ports: [{ containerPort: 8081 }]
           resources:
-            # ~100x over-provisioned: the extreme case, where percentile
-            # policies produce implausibly small targets and the floor gate must
-            # intervene.
-            requests: { cpu: 500m, memory: 512Mi }
-            limits:   { cpu: 500m, memory: 512Mi }
+            # 20x over-provisioned: the extreme case, where percentile policies
+            # produce implausibly small targets and the floor gate must intervene.
+            requests: { cpu: 100m, memory: 192Mi }
+            limits:   { cpu: 100m, memory: 192Mi }
           readinessProbe:
             httpGet: { path: /healthz, port: 8081 }
             initialDelaySeconds: 3
