@@ -16,10 +16,21 @@ __pycache__/
 
 # Generated experiment data.
 #
-# Result CSV/JSON files are NOT ignored: they are the evidence behind the report,
-# they are small (a few MB), and a reader must be able to check the figures
-# against them without re-running anything. Regenerating them is `make
-# experiments`, which takes about two minutes.
+# What is committed, and why:
+#
+#   experiments/results/*.csv.gz            the evidence behind every figure
+#   experiments/results/*.provenance.json   how each run was produced
+#
+# Together these are a few megabytes and are everything needed to check a figure
+# or reproduce a run, so they are version-controlled deliberately.
+#
+# The full JSON archive (*.json) repeats the same records with provenance attached
+# and is roughly forty times larger — 128 MB across the suite. It is written only
+# with `-archive-json` and is not committed; `make experiments` regenerates
+# everything in about two minutes.
+experiments/results/*.json
+!experiments/results/*.provenance.json
+experiments/results/*.csv
 
 # Local editor and OS noise
 .DS_Store

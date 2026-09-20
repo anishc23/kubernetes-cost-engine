@@ -1,12 +1,12 @@
 {
   "provenance": {
-    "git_commit": "c214eadd9bcd9269162d97c17354f808d69348ea",
+    "git_commit": "649eb1e80753455e186d37dc424224e64769db6a",
     "git_dirty": true,
     "config_name": "validate_default",
     "config_hash": "fca3611ee7a59f70",
-    "started_at": "2026-09-19T09:46:17.42331Z",
-    "finished_at": "2026-09-19T09:46:18.319756Z",
-    "duration_ms": 896,
+    "started_at": "2026-09-20T17:55:49.261033Z",
+    "finished_at": "2026-09-20T17:55:49.601624Z",
+    "duration_ms": 340,
     "go_version": "go1.27.1",
     "os": "darwin",
     "arch": "arm64",

@@ -1,12 +1,15 @@
 package experiment
 
 import (
+	"compress/gzip"
 	"encoding/csv"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 )
 
 // WriteJSON writes the full result, including provenance and the resolved
@@ -66,6 +69,12 @@ var csvColumns = []string{
 }
 
 // WriteCSV writes the records as a flat CSV for the Python analysis layer.
+//
+// A path ending in ".gz" is gzip-compressed. The shipped results are stored that
+// way because these files are committed as the evidence behind the report, and
+// the numeric columns compress about fourteen-fold — 38 MB of plain CSV becomes
+// under 3 MB. pandas reads ".csv.gz" transparently by extension, so the analysis
+// layer needs no special handling, and `zcat` still makes the raw rows readable.
 func WriteCSV(res *Result, path string) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return fmt.Errorf("create results directory: %w", err)
@@ -76,7 +85,14 @@ func WriteCSV(res *Result, path string) error {
 	}
 	defer f.Close()
 
-	w := csv.NewWriter(f)
+	var out io.Writer = f
+	if strings.HasSuffix(path, ".gz") {
+		gz := gzip.NewWriter(f)
+		defer gz.Close()
+		out = gz
+	}
+
+	w := csv.NewWriter(out)
 	defer w.Flush()
 	if err := w.Write(csvColumns); err != nil {
 		return fmt.Errorf("write header: %w", err)

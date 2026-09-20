@@ -1,12 +1,12 @@
 {
   "provenance": {
-    "git_commit": "c214eadd9bcd9269162d97c17354f808d69348ea",
+    "git_commit": "649eb1e80753455e186d37dc424224e64769db6a",
     "git_dirty": true,
     "config_name": "oom_recovery",
-    "config_hash": "d2b364703fe64bed",
-    "started_at": "2026-09-19T09:40:14.741688Z",
-    "finished_at": "2026-09-19T09:40:17.005316Z",
-    "duration_ms": 2263,
+    "config_hash": "fd2149a631c13da3",
+    "started_at": "2026-09-20T17:55:46.45057Z",
+    "finished_at": "2026-09-20T17:55:47.356909Z",
+    "duration_ms": 906,
     "go_version": "go1.27.1",
     "os": "darwin",
     "arch": "arm64",
@@ -57,6 +57,8 @@
     "cpu_cost_share": 0,
     "stability_recomputations": 0,
     "declared_cpu_scale": 0,
-    "declared_memory_scale": 0.35
+    "declared_memory_scale": 0.35,
+    "max_cpu_burstiness": 0,
+    "max_memory_burstiness": 0
   }
 }

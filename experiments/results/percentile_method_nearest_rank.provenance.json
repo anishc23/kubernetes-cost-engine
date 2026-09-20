@@ -1,12 +1,12 @@
 {
   "provenance": {
-    "git_commit": "c214eadd9bcd9269162d97c17354f808d69348ea",
+    "git_commit": "649eb1e80753455e186d37dc424224e64769db6a",
     "git_dirty": true,
     "config_name": "percentile_method_nearest_rank",
-    "config_hash": "c8a1b16f4d854fe4",
-    "started_at": "2026-09-19T09:36:52.173084Z",
-    "finished_at": "2026-09-19T09:36:54.778294Z",
-    "duration_ms": 2605,
+    "config_hash": "be049d7d13ab625a",
+    "started_at": "2026-09-20T17:55:48.322175Z",
+    "finished_at": "2026-09-20T17:55:49.227927Z",
+    "duration_ms": 905,
     "go_version": "go1.27.1",
     "os": "darwin",
     "arch": "arm64",
@@ -53,6 +53,10 @@
     },
     "cost_instance": "m5.xlarge",
     "cpu_cost_share": 0,
-    "stability_recomputations": 0
+    "stability_recomputations": 0,
+    "declared_cpu_scale": 0,
+    "declared_memory_scale": 0,
+    "max_cpu_burstiness": 0,
+    "max_memory_burstiness": 0
   }
 }

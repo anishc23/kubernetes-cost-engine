@@ -39,6 +39,7 @@ func run() error {
 		outDir      = flag.String("out", "experiments/results", "directory to write results into")
 		concurrency = flag.Int("concurrency", 0, "parallel conditions (default: number of CPUs)")
 		dryRun      = flag.Bool("dry-run", false, "report the size of the experiment matrix and exit")
+		archive     = flag.Bool("archive-json", false, "also write the full JSON archive (large; not version-controlled)")
 		logLevel    = flag.String("log-level", "info", "log level")
 	)
 	flag.Parse()
@@ -91,18 +92,28 @@ func run() error {
 	}
 
 	base := filepath.Join(*outDir, cfg.Name)
-	if err := experiment.WriteCSV(res, base+".csv"); err != nil {
-		return err
-	}
-	if err := experiment.WriteJSON(res, base+".json"); err != nil {
+	// The gzipped CSV and the provenance file are the committed evidence: together
+	// they are everything needed to check a figure or reproduce a run, at a few
+	// megabytes. The full JSON archive repeats the same records with provenance
+	// attached and is an order of magnitude larger, so it is written for local use
+	// and left out of version control (see .gitignore).
+	if err := experiment.WriteCSV(res, base+".csv.gz"); err != nil {
 		return err
 	}
 	if err := experiment.WriteProvenance(res, base+".provenance.json"); err != nil {
 		return err
 	}
+	if *archive {
+		if err := experiment.WriteJSON(res, base+".json"); err != nil {
+			return err
+		}
+	}
 
 	fmt.Printf("\n%s: %d records in %s\n", cfg.Name, len(res.Records), time.Since(start).Round(time.Millisecond))
-	fmt.Printf("  %s.csv\n  %s.json\n  %s.provenance.json\n", base, base, base)
+	fmt.Printf("  %s.csv.gz\n  %s.provenance.json\n", base, base)
+	if *archive {
+		fmt.Printf("  %s.json\n", base)
+	}
 	return nil
 }
 

@@ -51,11 +51,17 @@ STRATEGY_ORDER = ["current", "mean", "p50", "p90", "p95", "p99", "max"]
 
 
 def load(name: str) -> pd.DataFrame:
-    """Load one experiment's records, with categorical ordering applied."""
-    path = RESULTS_DIR / f"{name}.csv"
+    """Load one experiment's records, with categorical ordering applied.
+
+    Results are stored gzipped, which pandas handles by extension. A plain .csv is
+    accepted too, so a freshly generated file works either way.
+    """
+    gz = RESULTS_DIR / f"{name}.csv.gz"
+    plain = RESULTS_DIR / f"{name}.csv"
+    path = gz if gz.exists() else plain
     if not path.exists():
         raise FileNotFoundError(
-            f"{path} not found. Run `make experiments` (or "
+            f"Neither {gz} nor {plain} exists. Run `make experiments` (or "
             f"`go run ./cmd/experiment -config experiments/configs/{name}.yaml`) first."
         )
     df = pd.read_csv(path)
