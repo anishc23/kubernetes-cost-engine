@@ -167,7 +167,14 @@ func Default() Config {
 			UsageExceedsRequestPercentile: p.UsageExceedsRequestPercentile,
 			CPUFloor:                      "10m",
 			MemoryFloor:                   "32Mi",
-			MinRelativeChange:             p.MinRelativeChange,
+			// Carried over from the engine default rather than omitted. The
+			// instability gate is the mechanism that makes the shipped CPU policy
+			// safe on spiky workloads; dropping it here would silently disable that
+			// protection for any deployment configured from a file rather than
+			// through the Helm chart. TestDefaultPolicyConverts pins it.
+			MaxCPUBurstiness:    p.MaxCPUBurstiness,
+			MaxMemoryBurstiness: p.MaxMemoryBurstiness,
+			MinRelativeChange:   p.MinRelativeChange,
 		},
 		Cost: CostConfig{InstanceType: "m5.xlarge", CPUCostShare: cost.CPUCostShare},
 		Analysis: AnalysisConfig{

@@ -1,660 +1,278 @@
 # Kubernetes Cost Optimization Engine
 
-> A lightweight Kubernetes resource right-sizing and cost analysis engine that compares declared resource requests with observed usage and generates workload-level optimization recommendations.
+**A resource right-sizing system for Kubernetes, and a ground-truth study of
+whether right-sizing recommendations can be trusted.**
 
-## Overview
+The engine analyses historical CPU and memory usage, generates resource-specific
+recommendations with explicit safety gates, estimates allocation-based
+infrastructure waste, and exposes all of it over a REST API. Alongside it is a
+reproducible experimental framework that evaluates right-sizing strategies
+against *known ground truth* — which turns out to change the answers.
 
-Kubernetes workloads declare resource requests before they are scheduled.
-
-For example:
-
-```yaml
-resources:
-  requests:
-    cpu: "1"
-    memory: "2Gi"
+```
+ ┌──────────────────────────────┐        ┌──────────────────────────────┐
+ │      PRODUCTION SYSTEM       │        │     RESEARCH FRAMEWORK       │
+ │                              │        │                              │
+ │  Kubernetes ─► discovery     │        │  generative workloads        │
+ │  Prometheus ─► usage history │        │  known demand, censored obs. │
+ └──────────────┬───────────────┘        └──────────────┬───────────────┘
+                │                                       │
+                └───────────────┬───────────────────────┘
+                                ▼
+                    ┌───────────────────────┐
+                    │  model.Series         │   one boundary, one engine
+                    └───────────┬───────────┘
+                                ▼
+                    Recommendation engine
+              strategies (pure) + safety gates
+                                │
+              ┌─────────────────┼─────────────────┐
+              ▼                 ▼                 ▼
+         cost model      risk classification   counterfactual replay
+              │                 │                 │
+              ▼                 ▼                 ▼
+      REST API · CLI · Grafana        experiments · figures · report
 ```
 
-These requests influence how cluster capacity is allocated.
-
-In practice, workloads are often over-provisioned because operators prefer to reserve more capacity than risk performance problems. Across many workloads, this can result in significant unused reserved capacity.
-
-This project analyzes Kubernetes workloads over a configurable observation window and answers three questions:
-
-1. **How much CPU and memory is requested?**
-2. **How much is actually used?**
-3. **What resource configuration may reduce waste while maintaining an appropriate safety margin?**
-
-The engine then estimates the potential financial impact using configurable cloud pricing information.
+Production mode and research mode run **the same recommendation engine**, through
+the same entry point. Only the data source differs. That is what makes the
+experimental findings statements about the deployed system rather than about a
+research prototype.
 
 ---
 
-# Core Idea
+## The problem this actually studies
 
-A naive right-sizing system would apply the same percentile rule to every resource.
+Kubernetes reserves capacity by *declared request*, not by usage, so clusters
+carry a lot of idle reserved capacity. Tools exist to fix that — the Vertical Pod
+Autoscaler, Goldilocks, several commercial platforms — by recommending a high
+percentile of historical usage.
 
-This project does not.
+This project started from a prior question:
 
-CPU and memory behave differently and therefore require different recommendation strategies.
+> **How would you know whether a right-sizing recommendation was good?**
 
-## CPU
+That turns out to be hard, because **the usage data available to evaluate a
+recommendation is censored by the configuration being evaluated**. CPU that was
+throttled was never recorded as used. A container killed at its memory limit never
+recorded the working set it was reaching for. The measurement tops out at exactly
+the value you need to estimate — and it does so hardest in the cases where the
+configuration is wrong.
 
-CPU is generally compressible.
-
-If a workload wants more CPU than is available, it may be throttled or slowed rather than immediately terminated.
-
-A CPU recommendation can therefore use high-percentile observed usage with an explicit configurable safety margin.
-
-Conceptually:
-
-```text
-recommended_cpu =
-    high_percentile_cpu_usage × cpu_safety_factor
-```
-
-The exact percentile and safety factor are configurable.
+So the engine here is evaluated differently: synthetic workloads are generated
+from known demand models, the engine sees only a *censored* observation of a
+fitting window, and its recommendation is replayed against **uncensored demand
+over a held-out period it never saw**.
 
 ---
 
-## Memory
+## What the experiments found
 
-Memory is treated more conservatively.
+48,248 scored conditions across ten workload classes, seven strategies, four
+safety margins and four observation windows. [Full results](research/results.md).
 
-Memory pressure can result in workload termination, including OOM-related failures.
+| Finding | Evidence |
+|---|---|
+| **A reliability constraint reverses the strategy ranking** | mean and p50 lead on raw savings (69%) and deliver **zero** savings that survive the constraint; p99 delivers the most |
+| **No percentile short of the maximum is universally safe** | p95 leaves **34%** of demanded CPU work unserved on bursty workloads; on spiky workloads **even p99 leaves 8.5%** |
+| **The observed maximum is not an upper bound** | sizing memory to it with no margin survived only **47%** of conditions |
+| **A safety margin cannot repair a statistic that excludes the event** | memory p95 plateaus at **90%** survival even at a **2.0×** margin; max reaches 100% at 1.2× |
+| **CPU and memory fail on *different workloads*** | CPU fails on bursty/spiky; memory fails on bursty-memory, growing, sawtooth, mixed |
+| **A short observation window is worse on every axis at once** | 1h vs 72h: more aggressive, 53% vs 67% feasible, and an order of magnitude more volatile |
 
-A memory recommendation therefore considers:
+![Risk by strategy and workload class](analysis/figures/fig08_cpu_vs_memory_strategy.png)
 
-* Maximum observed working-set usage
-* Configurable safety margin
-* OOM-related restart history
+*If one policy served both resources, these two panels would show the same
+pattern. They do not — which is the evidence behind the engine's
+resource-specific design.*
 
-Conceptually:
+### The project's own default was refuted
 
-```text
-recommended_memory =
-    maximum_observed_memory × memory_safety_factor
-```
+It shipped with **CPU p95 × 1.15**, on the reasoning that CPU degradation is
+recoverable and so tolerates a lower percentile. The reasoning is sound. Measured
+against held-out demand, that default left **34% of demanded CPU work unserved**
+on bursty workloads.
 
-If the workload has evidence of OOM-related failures during the observation period, the engine can refuse to recommend a memory reduction.
+The replacement was derived from the same data — p99 × 1.25, plus an instability
+gate that withholds CPU reductions above 20× burstiness — and confirmed in a
+dedicated run: **100% feasibility across every class and seed at 33.7% median
+savings.**
 
-> Resource recommendations are guidance, not guarantees. Production changes should be validated through workload-specific testing and rollout controls.
-
----
-
-# Features
-
-* Kubernetes cluster inspection
-* Pod and workload resource request discovery
-* CPU usage analysis
-* Memory usage analysis
-* Prometheus integration
-* Configurable observation windows
-* CPU right-sizing recommendations
-* Memory right-sizing recommendations
-* OOM-aware memory reduction protection
-* Per-workload waste estimation
-* Configurable cloud pricing model
-* Monthly cost projection
-* REST API
-* Grafana dashboard
-* Kubernetes-native deployment
-* Helm chart installation
-* Local `kind` or `k3d` development support
-* Deliberately over-provisioned demo workloads for validation
+The cost is stated rather than hidden: p95 × 1.25 saves 58% at 80% feasibility.
+An operator who knows their workloads are not spiky should prefer it. And the
+burstiness threshold is the project's [most overfitted
+parameter](research/threats_to_validity.md) — tuned on ten synthetic classes and
+validated on the same ten.
 
 ---
 
-# Architecture
+## What it looks like
 
-```text
-                    ┌──────────────────────────┐
-                    │      Kubernetes API      │
-                    │       client-go          │
-                    └────────────┬─────────────┘
-                                 │
-                                 ▼
-                    ┌──────────────────────────┐
-                    │   Cluster Data Collector │
-                    │                          │
-                    │ Pods / Containers        │
-                    │ CPU Requests             │
-                    │ Memory Requests          │
-                    │ Restart Information      │
-                    └────────────┬─────────────┘
-                                 │
-                                 │
-                                 ▼
-┌──────────────────┐   ┌──────────────────────────┐
-│    Prometheus    │──▶│   Usage Data Collector   │
-│                  │   │                          │
-│ CPU Usage        │   │ Historical CPU Usage     │
-│ Memory Working   │   │ Historical Memory Usage  │
-│ Set              │   └────────────┬─────────────┘
-└──────────────────┘                │
-                                    ▼
-                         ┌──────────────────────────┐
-                         │ Recommendation Engine    │
-                         │                          │
-                         │ CPU Strategy             │
-                         │ Memory Strategy          │
-                         │ OOM Safety Checks        │
-                         └────────────┬─────────────┘
-                                      │
-                                      ▼
-                         ┌──────────────────────────┐
-                         │       Cost Engine        │
-                         │                          │
-                         │ Requested Capacity      │
-                         │ Observed Usage          │
-                         │ Potential Waste         │
-                         │ Monthly Projection      │
-                         └────────────┬─────────────┘
-                                      │
-                         ┌────────────┴─────────────┐
-                         ▼                          ▼
-               ┌──────────────────┐       ┌──────────────────┐
-               │    REST API      │       │ Grafana Dashboard│
-               └──────────────────┘       └──────────────────┘
+Real output, from a real cluster (kind + Prometheus + synthetic load generators):
+
+```
+$ koctl recommend --namespace demo
+
+NAMESPACE  WORKLOAD        CONTAINER  CPU NOW  CPU REC  CPU   MEM NOW  MEM REC  MEM   RISK  $/MO SAVED
+demo       idle            app        500m     40m      down  512Mi    95Mi     down  LOW   24.71
+demo       bursty-cpu      app        1500m    640m     down  1Gi      409Mi    down  LOW   22.67
+demo       stable-cpu      app        1        250m     down  1Gi      329Mi    down  LOW   20.18
+demo       growing-memory  app        500m     140m     down  1Gi      735Mi    down  LOW    9.57
+
+Allocation-based estimate over 4 workloads (policy c11c76cb86cf)
+  current:     $108.62/month
+  recommended: $31.49/month
+  savings:     $77.13/month (71.0%)
+  decisions:   8 decrease, 0 increase, 0 no change, 0 blocked, 0 insufficient data
+
+This prices reserved capacity, not cloud invoices. A saving is realised only when
+the freed capacity lets the cluster run fewer nodes. See docs/cost-model.md.
 ```
 
----
-
-# Components
-
-## 1. Kubernetes Controller / Collector
-
-Written primarily in Go using Kubernetes client libraries.
-
-The collector discovers:
-
-* Namespaces
-* Pods
-* Containers
-* Resource requests
-* Resource limits
-* Workload metadata
-* Restart information
-
-The initial objective is to reliably produce:
-
-```text
-WORKLOAD | CPU REQUESTED | CPU OBSERVED | MEMORY REQUESTED | MEMORY OBSERVED
-```
-
----
-
-## 2. Prometheus Usage Analysis
-
-Historical usage is collected through Prometheus queries.
-
-Relevant metrics may include:
-
-```text
-container_cpu_usage_seconds_total
-container_memory_working_set_bytes
-```
-
-Queries are evaluated over a configurable observation window, such as seven days.
-
-The recommendation engine can calculate:
-
-* Average usage
-* Maximum usage
-* Configured percentile usage
-* Peak-to-request ratio
-* Sustained underutilisation
-
-Metric availability and exact label structures depend on the Prometheus and Kubernetes environment.
-
----
-
-## 3. Recommendation Engine
-
-The recommendation engine evaluates CPU and memory independently.
-
-### CPU Recommendation
-
-CPU recommendations use a configurable high-percentile usage estimate plus safety margin.
-
-Example concept:
-
-```text
-Observed p95 CPU usage: 0.30 cores
-Safety factor: 1.20
-
-Recommendation:
-0.30 × 1.20 = 0.36 cores
-```
-
-The engine may round recommendations to practical Kubernetes quantities.
-
----
-
-### Memory Recommendation
-
-Memory recommendations are more conservative.
-
-Example concept:
-
-```text
-Maximum observed memory: 700 MiB
-Safety factor: 1.25
-
-Recommendation:
-875 MiB
-```
-
-If OOM-related events are detected during the observation period, memory reductions can be blocked or flagged for manual review.
-
----
-
-# Cost Model
-
-The cost model estimates the cost associated with reserved cluster capacity.
-
-Conceptually:
-
-```text
-Monthly Cost =
-    Requested CPU Capacity × CPU Cost Rate
-    +
-    Requested Memory Capacity × Memory Cost Rate
-```
-
-Potential waste is estimated by comparing:
-
-```text
-Current requested resources
-        vs
-Recommended resources
-```
-
-Example output:
-
-```text
-Workload: checkout-service
-
-Current:
-CPU Request:      2.00 cores
-Memory Request:   4 GiB
-
-Recommended:
-CPU Request:      0.75 cores
-Memory Request:   1.5 GiB
-
-Estimated Potential Savings:
-$XX.XX per month
-```
-
-Actual cloud billing depends on many factors, including:
-
-* Node instance types
-* Cluster autoscaling behavior
-* Bin packing efficiency
-* Reserved instances or savings plans
-* Spot instances
-* Region
-* Managed Kubernetes pricing
-* Networking and storage costs
-
-For this reason, cost estimates are presented as configurable estimates rather than exact cloud bills.
-
----
-
-# REST API
-
-The engine exposes workload analysis through a REST API.
-
-Planned example endpoints:
-
-```text
-GET /api/v1/workloads
-GET /api/v1/workloads/{namespace}/{name}
-GET /api/v1/recommendations
-GET /api/v1/cost-summary
-GET /api/v1/health
-```
-
-Example recommendation response:
+Every recommendation carries its evidence:
 
 ```json
 {
-  "workload": "checkout-service",
-  "namespace": "production",
-  "current": {
-    "cpu": "2",
-    "memory": "4Gi"
-  },
-  "recommended": {
-    "cpu": "750m",
-    "memory": "1536Mi"
-  },
-  "estimated_monthly_savings": 0,
-  "memory_reduction_allowed": true
+  "decision": "BLOCKED",
+  "risk": "HIGH",
+  "current": "2Gi",
+  "reason": "memory reduction withheld: 2 OOMKill(s) observed, so the working-set
+             series is censored and understates true demand",
+  "gates": ["oom-protection"],
+  "observed": { "mean": "680.4Mi", "p95": "720.1Mi", "max": "780.0Mi", "burstiness": 1.15 },
+  "strategy": "max", "safety_factor": 1.25, "samples": 10080
 }
 ```
 
-The values above are illustrative only.
+`BLOCKED` still reports the target the statistics produced, so the gate's effect is
+measurable rather than invisible.
 
 ---
 
-# Grafana Dashboard
+## Quick start
 
-The Grafana dashboard is intended to display:
-
-* Current resource requests
-* Actual CPU usage
-* Actual memory usage
-* Request-to-usage ratios
-* Potential over-provisioning
-* Estimated workload cost
-* Estimated optimization opportunity
-* CPU recommendations
-* Memory recommendations
-* Workloads requiring manual review
-
-The dashboard is the primary visualization layer. No separate application web interface is required.
-
----
-
-# Helm Installation
-
-The project is packaged as a Helm chart.
-
-The intended installation workflow is:
+### Look at the research without installing anything
 
 ```bash
-helm install k8s-cost-optimizer ./charts/k8s-cost-optimizer
+make experiments   # 48,248 conditions, ~2 minutes
+make analysis      # every figure and table in the report
 ```
 
-A production-ready chart will include configuration for:
+Everything in [research/results.md](research/results.md) regenerates from these
+two commands. No figure or number in the report is transcribed by hand.
 
-* Prometheus endpoint
-* Observation window
-* CPU percentile
-* CPU safety margin
-* Memory safety margin
-* Pricing configuration
-* Namespace scope
-* API configuration
-
----
-
-# Project Structure
-
-```text
-.
-├── cmd/
-│   ├── controller/
-│   └── api/
-│
-├── internal/
-│   ├── kubernetes/
-│   ├── prometheus/
-│   ├── recommendation/
-│   │   ├── cpu/
-│   │   └── memory/
-│   ├── cost/
-│   └── api/
-│
-├── pkg/
-│   └── models/
-│
-├── configs/
-│
-├── charts/
-│   └── k8s-cost-optimizer/
-│
-├── dashboards/
-│
-├── deploy/
-│   ├── kind/
-│   └── demo-workloads/
-│
-├── scripts/
-│
-├── docs/
-└── README.md
-```
-
-The exact structure may evolve during implementation.
-
----
-
-# Quick Start
-
-## Prerequisites
-
-* Go
-* Docker
-* Kubernetes
-* `kubectl`
-* `kind` or `k3d`
-* Helm
-* Prometheus
-* Grafana
-
-Apple Silicon users should ensure container images support `arm64`.
-
----
-
-## Create a Local Cluster
-
-Using `kind`:
+### Run it against a real cluster
 
 ```bash
-kind create cluster --name cost-optimizer
+make kind-e2e      # kind + Prometheus + demo workloads + optimizer + tests
 ```
 
-Verify:
+Or against your own:
 
 ```bash
-kubectl get nodes
+helm install cost-optimizer helm/k8s-cost-optimizer \
+  --namespace cost-optimizer --create-namespace \
+  --set prometheus.address=http://prometheus.monitoring.svc.cluster.local:9090
+
+kubectl -n cost-optimizer port-forward svc/cost-optimizer-k8s-cost-optimizer 8080:8080
+curl -s localhost:8080/api/v1/summary | jq
 ```
 
----
-
-## Deploy Prometheus
-
-Prometheus must be configured to collect container resource metrics.
-
-The exact deployment instructions will be added as the project implementation is completed.
+**This does not modify your cluster.** Mutation requires two independent settings
+and is off by default — see [docs/security.md](docs/security.md).
 
 ---
 
-## Deploy Demo Workloads
+## Safety model
 
-The repository will include intentionally over-provisioned workloads.
+The most realistic harm this tool can do is not a security breach. It is applying
+a memory reduction to a production workload that then gets OOMKilled under load.
+The controls are weighted accordingly:
 
-For example:
+- **Recommendation-only by default.** Mutation needs both `analysis.apply=true`
+  *and* `rbac.allowApply=true`; setting one without the other fails at Helm render
+  time, so a single typo cannot enable it.
+- **Requests only, never limits.** A memory limit determines when the kernel kills
+  the process; no usage series justifies changing that automatically.
+- **`BLOCKED` and `INSUFFICIENT_DATA` are never applied** — those are exactly the
+  cases where the engine declined to make a claim.
+- **OOM history blocks memory reductions.** An OOMKilled container's series is
+  censored and understates demand.
+- **Missing evidence blocks memory reductions.** Absent evidence is not evidence of
+  absence.
+- **No `delete` verb, no secret access**, ever — enforced by chart tests.
 
-```yaml
-resources:
-  requests:
-    cpu: "2"
-    memory: "2Gi"
-```
-
-The workload can be designed to use substantially less capacity, allowing the recommendation engine to identify the difference.
-
----
-
-## Run the Collector
-
-```bash
-go run ./cmd/controller
-```
-
-Expected high-level output:
-
-```text
-Collecting Kubernetes workload data...
-Querying Prometheus usage history...
-Generating recommendations...
-Calculating estimated cost impact...
-```
+Design principle throughout: **degrade to silence, never to a confident wrong
+answer.**
 
 ---
 
-# Recommendation Safety
+## Repository map
 
-Resource optimization can cause outages if performed blindly.
+| Path | Contents |
+|---|---|
+| [`research/`](research/) | The study: questions, methodology, results, threats to validity |
+| [`docs/`](docs/) | Architecture, algorithm, cost model, security, failure modes, troubleshooting |
+| [`internal/recommender/`](internal/recommender/) | Strategies, safety gates, the engine |
+| [`internal/simulator/`](internal/simulator/) | Generative workloads, censoring, counterfactual replay |
+| [`internal/experiment/`](internal/experiment/) | Matrix expansion, provenance, results — **no right-sizing logic** |
+| [`experiments/configs/`](experiments/configs/) | Version-controlled experiment specifications |
+| [`analysis/`](analysis/) | Python analysis; every figure and table |
+| [`helm/`](helm/) | Chart with least-privilege RBAC and render-time guardrails |
 
-The engine therefore treats recommendations as **advisory**.
-
-Important safeguards include:
-
-* Separate CPU and memory strategies
-* Configurable safety margins
-* Historical observation windows
-* OOM-aware memory recommendations
-* Manual review flags
-* No automatic modification of workload manifests by default
-
-Future versions may support controlled recommendation application, but automatic mutation is deliberately out of scope for the initial version.
-
----
-
-# Validation Methodology
-
-The project will be validated using controlled workloads with deliberately inflated resource requests.
-
-The evaluation process is:
-
-```text
-1. Deploy workload with known over-provisioning
-             ↓
-2. Generate controlled CPU and memory behavior
-             ↓
-3. Collect historical metrics
-             ↓
-4. Run recommendation engine
-             ↓
-5. Compare recommendation against known workload behavior
-             ↓
-6. Validate stability using the recommended configuration
-```
-
-This provides a reproducible demonstration of the system rather than relying solely on static screenshots.
+Start with [`research/technical_report.md`](research/technical_report.md) for the
+study, or [`docs/architecture.md`](docs/architecture.md) for the system.
 
 ---
 
-# Example Analysis
+## Documentation
 
-The following example is illustrative and not a measured result:
+**Research** — [Technical report](research/technical_report.md) ·
+[Research questions](research/research_questions.md) ·
+[Methodology](research/methodology.md) ·
+[Experimental setup](research/experimental_setup.md) ·
+[Results](research/results.md) ·
+[Discussion](research/discussion.md) ·
+[Limitations](research/limitations.md) ·
+[Threats to validity](research/threats_to_validity.md) ·
+[Related work](research/related_work.md)
 
-| Workload    | CPU Requested | CPU Observed | Memory Requested | Memory Observed | Recommendation          |
-| ----------- | ------------: | -----------: | ---------------: | --------------: | ----------------------- |
-| API Service |       2 cores |    0.3 cores |            4 GiB |         900 MiB | Reduce after validation |
-| Worker      |        1 core |    0.8 cores |            2 GiB |         1.8 GiB | Keep near current       |
-| Batch Job   |       4 cores |     variable |            8 GiB |        variable | Manual review           |
-
-Actual results will be generated by the implemented system.
-
----
-
-# Positioning
-
-This project is inspired by the broader problem addressed by Kubernetes cost-management platforms and tools such as Kubecost.
-
-The goal is **not** to reproduce a commercial platform.
-
-Instead, this project focuses on a narrower open-source engineering problem:
-
-> **A lightweight, Kubernetes-native engine for resource right-sizing recommendations with resource-specific safety strategies and transparent cost estimation.**
-
-Key areas of focus include:
-
-* Simplicity
-* Transparency
-* Reproducibility
-* Local development
-* Kubernetes-native deployment
-* Clear recommendation logic
+**Engineering** — [Architecture](docs/architecture.md) ·
+[Recommendation algorithm](docs/recommendation-algorithm.md) ·
+[Cost model](docs/cost-model.md) ·
+[Security](docs/security.md) ·
+[Failure modes](docs/failure-modes.md) ·
+[Troubleshooting](docs/troubleshooting.md)
 
 ---
 
-# Roadmap
+## What this is not
 
-## Cluster Discovery
+Stated plainly, because a tool that overstates itself is worse than one that
+reports a narrower but honest result:
 
-* [ ] Initialize Go project
-* [ ] Connect to Kubernetes using `client-go`
-* [ ] List pods and containers
-* [ ] Extract CPU requests
-* [ ] Extract memory requests
-* [ ] Extract resource limits
-* [ ] Collect restart information
+- **Not a novel algorithm.** Every strategy evaluated is a standard statistic.
+  Percentile-based right-sizing with asymmetric CPU/memory handling is the
+  Vertical Pod Autoscaler's design.
+- **Not better than Kubecost or OpenCost.** They solve cost *allocation* — given a
+  real bill, who spent it — which is a harder problem requiring billing
+  integration. A team wanting to know what their cluster costs should use those.
+- **Not production-validated.** The findings come from synthetic workloads. The
+  end-to-end test validates the collection path, not the findings.
+- **Not a cloud bill.** Savings are allocation-based estimates and an **upper
+  bound**: a reduction saves money only when freed capacity lets the cluster run
+  fewer nodes.
 
-## Prometheus Integration
-
-* [ ] Connect to Prometheus
-* [ ] Query CPU usage
-* [ ] Query memory working-set usage
-* [ ] Support configurable observation windows
-* [ ] Aggregate historical metrics
-
-## Recommendation Engine
-
-* [ ] CPU percentile-based recommendations
-* [ ] CPU safety margins
-* [ ] Memory peak-based recommendations
-* [ ] Memory safety margins
-* [ ] OOM-aware reduction protection
-* [ ] Recommendation confidence / review flags
-
-## Cost Engine
-
-* [ ] Resource cost model
-* [ ] Monthly cost projection
-* [ ] Per-workload waste estimates
-* [ ] Configurable pricing source
-* [ ] Pricing provider abstraction
-
-## Productization
-
-* [ ] REST API
-* [ ] Grafana dashboard
-* [ ] Demo workloads
-* [ ] Docker images
-* [ ] Helm chart
-* [ ] `kind` deployment
-* [ ] End-to-end demo
-* [ ] Documentation
+The claim being made is about a **methodology and an empirical study** — a much
+smaller claim than a novel algorithm, and the one the work supports.
 
 ---
 
-# Technology Stack
+## Status and license
 
-| Component              | Technology                        |
-| ---------------------- | --------------------------------- |
-| Primary Language       | Go                                |
-| Kubernetes Integration | client-go                         |
-| Metrics                | Prometheus                        |
-| Visualization          | Grafana                           |
-| Containerization       | Docker                            |
-| Local Kubernetes       | kind / k3d                        |
-| Packaging              | Helm                              |
-| API                    | Go HTTP framework to be finalized |
+Research prototype with a production-shaped implementation: tested at every level
+(unit, property, fake-cluster, chart-render, end-to-end on kind), instrumented,
+and deployable. Not validated in production.
 
-If Go implementation progress becomes a blocking issue, the data collection layer can be ported to the Python Kubernetes client. The priority is delivering a complete, working system.
-
----
-
-# Status
-
-**Active Development**
-
-This repository currently documents the planned architecture and implementation scope. Features listed as planned or unchecked in the roadmap are not yet implemented.
-
-Measured cost savings and optimization claims will be added only after reproducible experiments have been completed.
-
----
-
-# License
-
-To be added.
-
-# Author
-
-Built as a cloud and Kubernetes systems project focused on resource utilization, workload right-sizing, observability, and infrastructure cost optimization.
+Go 1.27 · Apache 2.0 · Contributions welcome — see
+[CONTRIBUTING.md](CONTRIBUTING.md)

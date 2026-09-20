@@ -155,9 +155,34 @@ not an implementation, and no performance claim is made about it.
 | 10,000 | ~20,000 queries | needs recording rules |
 | 100,000 | — | needs sharding |
 
-**The binding constraint is Prometheus query volume**, not optimizer CPU. Each
-container costs three range queries (CPU, memory, throttling) per cycle, and a
-7-day range at 1-minute resolution is ~10,000 samples per series.
+**The binding constraint is Prometheus query volume, not optimizer CPU** — and
+that is a measurement rather than an assumption:
+
+```
+$ make bench
+BenchmarkRecommend/7day-10        4786     252338 ns/op    330576 B/op    56 allocs/op
+BenchmarkSummarize/7day-10        4482     239456 ns/op     81952 B/op     2 allocs/op
+```
+
+A full recommendation for one workload over a 7-day window at 1-minute resolution
+costs **252 µs**. Ten thousand workloads is therefore ~2.5 CPU-seconds per cycle —
+negligible against a 15-minute interval.
+
+The same ten thousand workloads require **30,000 Prometheus range queries** (CPU,
+memory and throttling per container), each returning ~10,000 samples. That is
+where the time and the risk go.
+
+The batched-percentile path is worth its complexity for the same reason it is not
+the bottleneck — one sort serving four quantiles measures 175 µs against 698 µs
+for four separate calls:
+
+```
+BenchmarkPercentilesVersusIndividual/batched-10       6110    174788 ns/op
+BenchmarkPercentilesVersusIndividual/individual-10    1711    697941 ns/op
+```
+
+(Measured on an Apple M5, `go test -bench`. Absolute figures will differ by
+machine; the ratio between compute and query cost is the durable part.)
 
 What would have to change, in the order it would become necessary:
 

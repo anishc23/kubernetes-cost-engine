@@ -1,0 +1,146 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    name: Build and test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.27'
+          cache: true
+
+      - name: Check formatting
+        run: |
+          unformatted=$(gofmt -l . | grep -v '^\.venv' || true)
+          if [ -n "$unformatted" ]; then
+            echo "These files are not gofmt'd:"
+            echo "$unformatted"
+            exit 1
+          fi
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Build
+        run: make build
+
+      - name: Test
+        run: go test ./... -count=1
+
+      # Run under the race detector separately: the analysis service serves a
+      # snapshot from a background loop, which is exactly the shape of code where
+      # a data race would be both easy to introduce and hard to reproduce.
+      - name: Test with race detector
+        run: go test -race ./... -count=1
+
+  chart:
+    name: Helm chart
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.27'
+          cache: true
+      - uses: azure/setup-helm@v4
+        with:
+          version: v3.16.2
+
+      - name: Lint and render
+        run: make lint-chart
+
+      # These assert the security properties of the rendered chart: that the
+      # default install grants no write access, that mutation requires two
+      # independent settings, and that secrets and the delete verb are never
+      # granted.
+      - name: Chart security tests
+        run: go test ./test/helm/ -v -count=1
+
+  experiments:
+    name: Experiment pipeline
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.27'
+          cache: true
+
+      # The smoke configuration, not the full suite: this checks that the
+      # pipeline runs end to end after a change, in about a second. Regenerating
+      # the published results is a deliberate act, not something CI should do.
+      - name: Smoke experiment
+        run: make experiment-smoke
+
+      - name: Verify every shipped experiment config loads
+        run: go test ./internal/experiment/ -run Shipped -v -count=1
+
+  e2e:
+    name: End-to-end on kind
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.27'
+          cache: true
+      - uses: helm/kind-action@v1
+        with:
+          config: deploy/kind/cluster.yaml
+          cluster_name: cost-optimizer
+      - uses: azure/setup-helm@v4
+        with:
+          version: v3.16.2
+
+      - name: Deploy Prometheus and demo workloads
+        run: |
+          kubectl apply -f deploy/kind/prometheus.yaml
+          kubectl -n monitoring rollout status deploy/prometheus --timeout=180s
+          docker build -f cmd/workload-gen/Dockerfile -t k8s-cost-optimizer/workload-gen:dev .
+          kind load docker-image k8s-cost-optimizer/workload-gen:dev --name cost-optimizer
+          kubectl apply -f examples/workloads/demo-workloads.yaml
+          kubectl -n demo wait --for=condition=available --timeout=180s deploy --all
+
+      - name: Deploy the optimizer
+        run: |
+          docker build -t ghcr.io/anishc23/k8s-cost-optimizer:dev .
+          kind load docker-image ghcr.io/anishc23/k8s-cost-optimizer:dev --name cost-optimizer
+          helm install cost-optimizer helm/k8s-cost-optimizer \
+            --namespace cost-optimizer --create-namespace \
+            --set image.repository=ghcr.io/anishc23/k8s-cost-optimizer \
+            --set image.tag=dev \
+            --set prometheus.address=http://prometheus.monitoring.svc.cluster.local:9090 \
+            --set policy.observationWindow=30m \
+            --set policy.minSamples=10 \
+            --set policy.minDuration=3m \
+            --set analysis.interval=1m \
+            --set service.type=NodePort \
+            --wait --timeout 5m
+          kubectl -n cost-optimizer patch svc cost-optimizer-k8s-cost-optimizer \
+            --type=json -p='[{"op":"replace","path":"/spec/ports/0/nodePort","value":30080}]'
+
+      # The optimizer's data-sufficiency gate needs a minimum number of samples;
+      # without this wait the test would fail on timing rather than on behaviour.
+      - name: Accumulate usage history
+        run: sleep 300
+
+      - name: End-to-end test
+        run: go test ./test/e2e/ -tags=e2e -v -count=1 -timeout 15m
+
+      - name: Diagnostics on failure
+        if: failure()
+        run: |
+          kubectl -n cost-optimizer logs deploy/cost-optimizer-k8s-cost-optimizer --tail=100 || true
+          kubectl -n cost-optimizer describe pods || true
+          kubectl -n demo get pods -o wide || true
