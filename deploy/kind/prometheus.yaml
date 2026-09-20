@@ -1,0 +1,152 @@
+# A minimal Prometheus for end-to-end validation.
+#
+# This is not a production monitoring setup. It scrapes only what the optimizer
+# needs — cAdvisor container metrics from the kubelet — with a short scrape
+# interval and short retention, so that a test can generate enough history in
+# minutes rather than days.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: monitoring
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: prometheus
+  namespace: monitoring
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: prometheus
+rules:
+  - apiGroups: [""]
+    resources: ["nodes", "nodes/metrics", "nodes/proxy", "services", "endpoints", "pods"]
+    verbs: ["get", "list", "watch"]
+  - nonResourceURLs: ["/metrics", "/metrics/cadvisor"]
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: prometheus
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: prometheus
+subjects:
+  - kind: ServiceAccount
+    name: prometheus
+    namespace: monitoring
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-config
+  namespace: monitoring
+data:
+  prometheus.yml: |
+    global:
+      # 15s rather than the usual 30-60s: the e2e test needs enough samples to
+      # clear the optimizer's data-sufficiency gate within a few minutes.
+      scrape_interval: 15s
+      evaluation_interval: 15s
+
+    scrape_configs:
+      # cAdvisor, via the kubelet. This is the source of
+      # container_cpu_usage_seconds_total and
+      # container_memory_working_set_bytes — the two metrics the optimizer's
+      # recommendations are built from.
+      - job_name: kubernetes-cadvisor
+        scheme: https
+        tls_config:
+          ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+          insecure_skip_verify: true
+        bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+        kubernetes_sd_configs:
+          - role: node
+        relabel_configs:
+          - action: labelmap
+            regex: __meta_kubernetes_node_label_(.+)
+          - target_label: __address__
+            replacement: kubernetes.default.svc:443
+          - source_labels: [__meta_kubernetes_node_name]
+            regex: (.+)
+            target_label: __metrics_path__
+            replacement: /api/v1/nodes/${1}/proxy/metrics/cadvisor
+        metric_relabel_configs:
+          # Keep only what the optimizer queries. cAdvisor emits a great deal
+          # more, and on a small test cluster the rest is noise that slows
+          # queries down.
+          - source_labels: [__name__]
+            regex: 'container_(cpu_usage_seconds_total|memory_working_set_bytes|cpu_cfs_throttled_periods_total|cpu_cfs_periods_total|spec_.*)'
+            action: keep
+
+      # The optimizer's own metrics, so the e2e test can assert on them.
+      - job_name: cost-optimizer
+        kubernetes_sd_configs:
+          - role: pod
+            namespaces:
+              names: [cost-optimizer]
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_pod_label_app_kubernetes_io_name]
+            regex: k8s-cost-optimizer
+            action: keep
+          - source_labels: [__address__]
+            regex: '(.+):\d+'
+            target_label: __address__
+            replacement: ${1}:9090
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: prometheus
+  namespace: monitoring
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: prometheus }
+  template:
+    metadata:
+      labels: { app: prometheus }
+    spec:
+      serviceAccountName: prometheus
+      containers:
+        - name: prometheus
+          image: prom/prometheus:v3.7.3
+          args:
+            - --config.file=/etc/prometheus/prometheus.yml
+            - --storage.tsdb.path=/prometheus
+            # Short retention: this is a test fixture, not a monitoring system.
+            - --storage.tsdb.retention.time=2h
+            - --web.enable-lifecycle
+          ports:
+            - containerPort: 9090
+          resources:
+            requests: { cpu: 100m, memory: 256Mi }
+            limits:   { memory: 1Gi }
+          volumeMounts:
+            - { name: config, mountPath: /etc/prometheus }
+            - { name: data, mountPath: /prometheus }
+          readinessProbe:
+            httpGet: { path: /-/ready, port: 9090 }
+            initialDelaySeconds: 5
+            periodSeconds: 5
+      volumes:
+        - name: config
+          configMap: { name: prometheus-config }
+        - name: data
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: prometheus
+  namespace: monitoring
+spec:
+  type: NodePort
+  selector: { app: prometheus }
+  ports:
+    - port: 9090
+      targetPort: 9090
+      nodePort: 30090

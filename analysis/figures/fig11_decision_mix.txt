@@ -1,0 +1,5 @@
+Distribution of engine decisions per workload class under the shipped policy. A savings
+total hides this structure: the engine declines to act on some classes entirely, and on the
+under-provisioned cases it recommends an increase, which costs money and is the correct
+advice. An evaluation that reported only the cost reduction would score the increases as a
+failure.

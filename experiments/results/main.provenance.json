@@ -1,0 +1,69 @@
+{
+  "provenance": {
+    "git_commit": "c214eadd9bcd9269162d97c17354f808d69348ea",
+    "git_dirty": true,
+    "config_name": "main",
+    "config_hash": "be761be092ed5acb",
+    "started_at": "2026-09-19T09:35:40.70948Z",
+    "finished_at": "2026-09-19T09:36:07.595279Z",
+    "duration_ms": 26885,
+    "go_version": "go1.27.1",
+    "os": "darwin",
+    "arch": "arm64",
+    "tool_version": "dev",
+    "cost_model": "aws/us-east-1/m5.xlarge",
+    "conditions": 19600,
+    "records": 19600
+  },
+  "config": {
+    "name": "main",
+    "description": "Strategy comparison across workload classes and safety factors, scored against held-out ground-truth demand.\n",
+    "workloads": [],
+    "cpu_strategies": [
+      "current",
+      "mean",
+      "p50",
+      "p90",
+      "p95",
+      "p99",
+      "max"
+    ],
+    "memory_strategies": [
+      "current",
+      "mean",
+      "p50",
+      "p90",
+      "p95",
+      "p99",
+      "max"
+    ],
+    "observation_windows": [
+      "24h0m0s"
+    ],
+    "safety_factors": [
+      1,
+      1.15,
+      1.25,
+      1.5
+    ],
+    "seeds": 10,
+    "base_seed": 20250901,
+    "trace_duration": "96h0m0s",
+    "step": "30s",
+    "evaluation_horizon": "24h0m0s",
+    "percentile_method": "linear",
+    "disable_oom_protection": false,
+    "disable_usage_exceeds": false,
+    "disable_floors": false,
+    "disable_min_change": false,
+    "disable_rounding": false,
+    "unified_strategy": false,
+    "feasibility": {
+      "max_oom_kills": 0,
+      "max_cpu_throttle_fraction": 0.01
+    },
+    "cost_instance": "m5.xlarge",
+    "cpu_cost_share": 0,
+    "stability_recomputations": 0
+  }
+}

@@ -1,0 +1,15 @@
+{{- if .Values.grafanaDashboard.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "k8s-cost-optimizer.fullname" . }}-dashboard
+  {{- if .Values.grafanaDashboard.namespace }}
+  namespace: {{ .Values.grafanaDashboard.namespace }}
+  {{- end }}
+  labels:
+    {{- include "k8s-cost-optimizer.labels" . | nindent 4 }}
+    {{ .Values.grafanaDashboard.label }}: {{ .Values.grafanaDashboard.labelValue | quote }}
+data:
+  k8s-cost-optimizer.json: |
+{{ .Files.Get "dashboards/k8s-cost-optimizer.json" | indent 4 }}
+{{- end }}

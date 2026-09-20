@@ -78,6 +78,13 @@ func CPUString(m model.Millicores) string {
 // MemoryString renders bytes using the largest binary suffix that divides the
 // value evenly, so that 1536Mi is not reported as 1.5Gi (which Kubernetes
 // accepts but operators find harder to compare).
+//
+// Values that divide no suffix evenly — observed statistics such as a mean
+// working set, which are never round — are rendered in MiB with one decimal
+// place rather than as a raw byte count. A recommendation of "1536Mi" beside an
+// observed mean of "229332309" is not a comparison a reader can make. The
+// decimal form remains a valid Kubernetes quantity, so nothing downstream has to
+// special-case it.
 func MemoryString(b model.Bytes) string {
 	if b <= 0 {
 		return "0"
@@ -88,8 +95,17 @@ func MemoryString(b model.Bytes) string {
 		return fmt.Sprintf("%dGi", v/model.BytesPerGi)
 	case v%model.BytesPerMi == 0:
 		return fmt.Sprintf("%dMi", v/model.BytesPerMi)
+	case v >= model.BytesPerMi:
+		// Anything at or above a mebibyte renders in MiB, even when it happens to
+		// divide evenly into kibibytes. Checking Ki-divisibility first would print
+		// an observed maximum as "334856Ki" next to a mean of "294.2Mi", and two
+		// statistics of the same series in different units cannot be compared at a
+		// glance — which is the entire purpose of showing them together.
+		return fmt.Sprintf("%.1fMi", float64(v)/float64(model.BytesPerMi))
 	case v%model.BytesPerKi == 0:
 		return fmt.Sprintf("%dKi", v/model.BytesPerKi)
+	case v >= model.BytesPerKi:
+		return fmt.Sprintf("%.1fKi", float64(v)/float64(model.BytesPerKi))
 	default:
 		return fmt.Sprintf("%d", v)
 	}

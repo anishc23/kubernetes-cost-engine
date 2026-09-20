@@ -95,8 +95,8 @@ func run() error {
 	log.Info("starting optimizer",
 		"version", version.Version, "commit", version.Commit,
 		"prometheus", cfg.Prometheus.Address,
-		"observation_window", cfg.Policy.ObservationWindow.D(),
-		"analysis_interval", cfg.Analysis.Interval.D(),
+		"observation_window", cfg.Policy.ObservationWindow.String(),
+		"analysis_interval", cfg.Analysis.Interval.String(),
 		"apply", cfg.Analysis.Apply)
 
 	if cfg.Analysis.Apply {

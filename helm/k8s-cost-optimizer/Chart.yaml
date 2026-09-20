@@ -1,0 +1,22 @@
+apiVersion: v2
+name: k8s-cost-optimizer
+description: Kubernetes resource right-sizing engine with resource-specific CPU and memory policies, risk-aware recommendations and allocation-based cost estimation.
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+keywords:
+  - kubernetes
+  - cost-optimization
+  - right-sizing
+  - resource-management
+  - finops
+home: https://github.com/anishc23/k8s-cost-optimizer
+sources:
+  - https://github.com/anishc23/k8s-cost-optimizer
+maintainers:
+  - name: anishc23
+annotations:
+  # Stated on the chart itself, because the single most important thing an
+  # operator must know before installing is that this tool gives advice and does
+  # not act on it unless explicitly told to.
+  optimizer.io/default-mode: "recommendation-only; set analysis.apply=true to enable cluster mutation"

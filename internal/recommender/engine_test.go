@@ -389,10 +389,21 @@ func TestInstabilityGateBlocksBurstyReductions(t *testing.T) {
 	}
 }
 
-// The invariant that makes the gate chain a safety mechanism rather than a risk:
-// no gate may lower a target. Violating it panics in the engine; this test
-// exercises every gate against a wide range of inputs to confirm none does.
-func TestGatesNeverLowerTarget(t *testing.T) {
+// The invariant that makes the gate chain a safety mechanism rather than an
+// additional source of risk:
+//
+//	result.Target >= min(proposed, current)
+//
+// A gate may hold at the current request, raise a target, or cancel a proposed
+// change, but it may never produce something more aggressive than both the
+// strategy's proposal and the deployed configuration.
+//
+// The bound is min() rather than the proposal alone because cancelling a marginal
+// increase legitimately lowers the target back to the current request. An earlier
+// version of this test asserted against the proposal alone and therefore passed
+// while the engine's matching assertion panicked mid-experiment on a 9% proposed
+// increase; the near-current increase cases below are the ones that were missing.
+func TestGatesNeverGoBelowProposedOrCurrent(t *testing.T) {
 	gates := []Gate{
 		SufficiencyGate{MinSamples: 10, MinDuration: time.Minute, MinCoverage: 0.8},
 		OOMProtectionGate{LookbackRelevance: 14 * 24 * time.Hour, RequireEvidence: true},
@@ -402,14 +413,17 @@ func TestGatesNeverLowerTarget(t *testing.T) {
 		MinChangeGate{MinRelativeChange: 0.1},
 	}
 	last := time.Now().Add(-time.Hour)
-	inputs := []GateInput{}
+	var inputs []GateInput
 	for _, kind := range []model.ResourceKind{model.ResourceCPU, model.ResourceMemory} {
-		for _, cur := range []float64{1, 100, 1000, 1e9} {
-			for _, tgt := range []float64{0.5, 50, 900, 1100, 2e9} {
+		for _, cur := range []float64{1, 100, 1000, 2000, 1e9} {
+			// Targets deliberately include values just above and just below the
+			// current request, which is where the minimum-change gate acts and
+			// where the naive form of this invariant breaks.
+			for _, mult := range []float64{0.0005, 0.5, 0.91, 0.96, 1.0, 1.04, 1.09, 1.5, 3.0} {
 				for _, evp := range []bool{true, false} {
 					for _, ooms := range []int{0, 3} {
 						inputs = append(inputs, GateInput{
-							Resource: kind, Current: cur, Target: tgt,
+							Resource: kind, Current: cur, Target: cur * mult,
 							Summary: stats.Summary{
 								Samples: 120, Mean: 100, P95: 200, P99: 400, Max: 2000,
 								Burstiness: 20, WindowDuration: 2 * time.Hour,
@@ -427,17 +441,69 @@ func TestGatesNeverLowerTarget(t *testing.T) {
 		for _, in := range inputs {
 			res := g.Evaluate(in)
 			if res.Block {
-				// A blocking gate holds the line at the current value.
+				// A blocking gate holds the line at the current value exactly.
 				if res.Target != in.Current {
 					t.Errorf("gate %s blocked but set target %v != current %v", g.ID(), res.Target, in.Current)
 				}
 				continue
 			}
-			if res.Target < in.Target {
-				t.Errorf("gate %s lowered target from %v to %v (resource %s, current %v)",
-					g.ID(), in.Target, res.Target, in.Resource, in.Current)
+			floor := math.Min(in.Target, in.Current)
+			if res.Target < floor-1e-9 {
+				t.Errorf("gate %s violated the invariant: target %v < min(proposed %v, current %v) [resource %s]",
+					g.ID(), res.Target, in.Target, in.Current, in.Resource)
 			}
 		}
+	}
+}
+
+// The specific case that broke the naive invariant: a proposed increase too small
+// to justify a rollout must be cancelled, returning the current request.
+func TestMinChangeCancelsMarginalIncrease(t *testing.T) {
+	g := MinChangeGate{MinRelativeChange: 0.10}
+	res := g.Evaluate(GateInput{
+		Resource: model.ResourceCPU, Current: 2000, Target: 2182,
+		Sufficiency: model.DataSufficiency{Sufficient: true},
+	})
+	if !res.Fired {
+		t.Error("a 9% increase should be suppressed")
+	}
+	if res.Target != 2000 {
+		t.Errorf("target = %v, want the current request 2000", res.Target)
+	}
+	if res.Block {
+		t.Error("a suppressed marginal change is NO_CHANGE, not BLOCKED: nothing was refused on safety grounds")
+	}
+	// And a change above the threshold must pass through untouched.
+	res2 := g.Evaluate(GateInput{Resource: model.ResourceCPU, Current: 2000, Target: 2400})
+	if res2.Fired || res2.Target != 2400 {
+		t.Errorf("a 20%% increase should pass through, got %+v", res2)
+	}
+}
+
+// End to end: a marginal proposed increase must surface as NO_CHANGE from the
+// engine, not as an INCREASE nor as a panic.
+func TestEngineReportsNoChangeForMarginalIncrease(t *testing.T) {
+	p := sufficientPolicy()
+	p.CPUStrategy = "max"
+	p.CPUSafetyFactor = 1.0
+	p.MinRelativeChange = 0.10
+	e := mustEngine(t, p)
+	ev := model.RestartEvidence{}
+	// max usage 2090m against a 2000m request: a 4.5% proposed increase.
+	cpu := series(model.ResourceCPU, 30*time.Second, repeat(2090, 120)...)
+	mem := series(model.ResourceMemory, 30*time.Second, repeat(200e6, 120)...)
+	rec := e.Recommend(workload(cpu, mem, 2000, 4e9, &ev))
+	c := rec.Containers[0]
+	if c.CPU.Decision != model.DecisionNoChange {
+		t.Errorf("CPU decision = %s, want NO_CHANGE (reason: %s)", c.CPU.Decision, c.CPU.Reason)
+	}
+	if c.CPU.Target != 2000 {
+		t.Errorf("CPU target = %v, want the current 2000m", c.CPU.Target)
+	}
+	// The raw target must still record what the statistic proposed, so the
+	// suppression is measurable.
+	if c.CPU.RawTarget <= 2000 {
+		t.Errorf("RawTarget = %v should record the proposed increase", c.CPU.RawTarget)
 	}
 }
 

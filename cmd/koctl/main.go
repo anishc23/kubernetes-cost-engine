@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"os"
 	"sort"
+	"strings"
 	"text/tabwriter"
 	"time"
 
@@ -55,29 +56,51 @@ Examples:
   koctl recommend --prometheus-address http://localhost:9090
   koctl recommend --namespace production --output json
   koctl recommend --cpu-strategy p99 --cpu-safety-factor 1.3
+
+Evaluating against a cluster with only minutes of history (the defaults require
+an hour):
+  koctl recommend --observation-window 30m --min-samples 10 --min-duration 5m
 `)
 }
 
 func run() error {
-	var (
-		configPath  = flag.String("config", "", "path to a YAML configuration file")
-		kubeconfig  = flag.String("kubeconfig", "", "path to a kubeconfig file (default: the usual resolution rules)")
-		promAddr    = flag.String("prometheus-address", "", "Prometheus base URL")
-		namespace   = flag.String("namespace", "", "restrict analysis to one namespace")
-		window      = flag.Duration("observation-window", 0, "observation window")
-		output      = flag.String("output", "table", "output format: table or json")
-		cpuStrategy = flag.String("cpu-strategy", "", "CPU strategy: mean, p50, p90, p95, p99, max, current")
-		memStrategy = flag.String("memory-strategy", "", "memory strategy: mean, p50, p90, p95, p99, max, current")
-		cpuSafety   = flag.Float64("cpu-safety-factor", 0, "CPU safety factor (>= 1.0)")
-		memSafety   = flag.Float64("memory-safety-factor", 0, "memory safety factor (>= 1.0)")
-		instance    = flag.String("instance-type", "", "instance type used to derive cost rates")
-		minSavings  = flag.Float64("min-savings", 0, "only show workloads saving at least this much per month")
-		logLevel    = flag.String("log-level", "warn", "log level")
-	)
-	flag.Usage = usage
-	flag.Parse()
+	// The subcommand is extracted before flag parsing, not read from flag.Arg(0)
+	// afterwards.
+	//
+	// Go's flag package stops parsing at the first non-flag argument, so with the
+	// natural invocation `koctl recommend --namespace prod` every flag after the
+	// subcommand is silently ignored — the command runs with defaults and gives no
+	// indication that the flags were dropped. Pulling the subcommand off the front
+	// and parsing the remainder makes flags work in the position users write them.
+	args := os.Args[1:]
+	var cmd string
+	if len(args) > 0 && !strings.HasPrefix(args[0], "-") {
+		cmd, args = args[0], args[1:]
+	}
 
-	cmd := flag.Arg(0)
+	fs := flag.NewFlagSet("koctl", flag.ContinueOnError)
+	fs.Usage = usage
+	var (
+		configPath  = fs.String("config", "", "path to a YAML configuration file")
+		kubeconfig  = fs.String("kubeconfig", "", "path to a kubeconfig file (default: the usual resolution rules)")
+		promAddr    = fs.String("prometheus-address", "", "Prometheus base URL")
+		namespace   = fs.String("namespace", "", "restrict analysis to one namespace")
+		window      = fs.Duration("observation-window", 0, "observation window")
+		output      = fs.String("output", "table", "output format: table or json")
+		cpuStrategy = fs.String("cpu-strategy", "", "CPU strategy: mean, p50, p90, p95, p99, max, current")
+		memStrategy = fs.String("memory-strategy", "", "memory strategy: mean, p50, p90, p95, p99, max, current")
+		cpuSafety   = fs.Float64("cpu-safety-factor", 0, "CPU safety factor (>= 1.0)")
+		memSafety   = fs.Float64("memory-safety-factor", 0, "memory safety factor (>= 1.0)")
+		instance    = fs.String("instance-type", "", "instance type used to derive cost rates")
+		minSamples  = fs.Int("min-samples", 0, "minimum samples required before a recommendation is made")
+		minDuration = fs.Duration("min-duration", 0, "minimum observed span required before a recommendation is made")
+		minSavings  = fs.Float64("min-savings", 0, "only show workloads saving at least this much per month")
+		logLevel    = fs.String("log-level", "warn", "log level")
+	)
+	if err := fs.Parse(args); err != nil {
+		// ContinueOnError has already printed the problem and the usage text.
+		return fmt.Errorf("invalid arguments")
+	}
 	if cmd == "" {
 		usage()
 		return fmt.Errorf("a subcommand is required")
@@ -122,6 +145,15 @@ func run() error {
 	}
 	if *instance != "" {
 		cfg.Cost.InstanceType = *instance
+	}
+	// Exposed because evaluating the tool locally means pointing it at a cluster
+	// with minutes of history rather than days. Without these, the only way to get
+	// a recommendation out of a fresh cluster is to write a config file.
+	if *minSamples > 0 {
+		cfg.Policy.MinSamples = *minSamples
+	}
+	if *minDuration > 0 {
+		cfg.Policy.MinDuration = humanize.Duration(*minDuration)
 	}
 	if err := cfg.Validate(); err != nil {
 		return err

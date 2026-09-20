@@ -1,0 +1,63 @@
+{{- if .Values.rbac.create }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "k8s-cost-optimizer.fullname" . }}
+  labels:
+    {{- include "k8s-cost-optimizer.labels" . | nindent 4 }}
+rules:
+  # Read-only discovery. These are the minimum verbs that let the optimizer find
+  # workloads, read their declared requests, and read the restart and OOM
+  # evidence its safety gates depend on.
+  #
+  # Notably absent: secrets, configmaps, and any verb on any resource outside
+  # this list. The optimizer never needs to read application data, and a
+  # cost-analysis tool with secret access is a credential-theft target for no
+  # benefit.
+  - apiGroups: [""]
+    resources:
+      - namespaces
+      - pods          # restart counts and OOMKilled termination reasons
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["apps"]
+    resources:
+      - deployments
+      - statefulsets
+      - daemonsets
+      - replicasets   # to resolve pod -> ReplicaSet -> Deployment ownership
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["batch"]
+    resources:
+      - cronjobs
+      - jobs
+    verbs: ["get", "list", "watch"]
+{{- if .Values.rbac.allowApply }}
+  # Write access, granted only when rbac.allowApply is true.
+  #
+  # `patch` and `update` on pod-template owners is enough to change resource
+  # requests, and patching a template restarts every pod in the workload. `delete`
+  # is deliberately NOT granted: the optimizer has no reason to remove a workload,
+  # and withholding the verb means a bug cannot escalate into deleting one.
+  - apiGroups: ["apps"]
+    resources:
+      - deployments
+      - statefulsets
+      - daemonsets
+    verbs: ["patch", "update"]
+{{- end }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ include "k8s-cost-optimizer.fullname" . }}
+  labels:
+    {{- include "k8s-cost-optimizer.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ include "k8s-cost-optimizer.fullname" . }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "k8s-cost-optimizer.serviceAccountName" . }}
+    namespace: {{ .Release.Namespace }}
+{{- end }}

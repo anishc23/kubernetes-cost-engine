@@ -1,0 +1,189 @@
+# Default values for k8s-cost-optimizer.
+#
+# The defaults are deliberately conservative: recommendation-only, system
+# namespaces excluded, DaemonSets excluded, and a policy configuration derived
+# from the experimental results in research/results.md rather than from intuition.
+
+replicaCount: 1
+
+image:
+  repository: ghcr.io/anishc23/k8s-cost-optimizer
+  tag: ""            # defaults to .Chart.AppVersion
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}
+
+rbac:
+  create: true
+  # Read-only cluster access is the default. Enabling apply mode additionally
+  # requires allowApply below, so that granting write permission is a separate,
+  # deliberate act from turning mutation on.
+  allowApply: false
+
+service:
+  type: ClusterIP
+  port: 8080
+  metricsPort: 9090
+  annotations: {}
+
+# --- application configuration ---
+
+log:
+  level: info
+  format: json
+
+prometheus:
+  # Adjust to your Prometheus service. The optimizer is useless without it, and
+  # a wrong address surfaces as every workload reporting INSUFFICIENT_DATA.
+  address: http://prometheus-server.monitoring.svc.cluster.local
+  timeout: 30s
+  # Query resolution. Shorter reveals briefer bursts at the cost of more samples
+  # per query; below the scrape interval it yields interpolated points that carry
+  # no extra information.
+  step: 1m
+  # For a Prometheus behind authentication; typically the projected service
+  # account token.
+  bearerTokenFile: ""
+
+kubernetes:
+  # Empty means every namespace the service account can list.
+  namespaces: []
+  excludeNamespaces:
+    - kube-system
+    - kube-public
+    - kube-node-lease
+  labelSelector: ""
+  # DaemonSets are excluded by default: their request is multiplied across every
+  # node, so the cost consequences of a change differ in kind, and node agents
+  # are often the workloads whose degradation is least tolerable.
+  includeDaemonSets: false
+
+policy:
+  # These values are experimental results, not preferences. See
+  # research/results.md; the shipped CPU default was originally p95 x1.15 and was
+  # replaced after the experiments showed it leaves 34% of demanded CPU work
+  # unserved on bursty workloads.
+  cpuStrategy: p99
+  memoryStrategy: max
+  cpuSafetyFactor: 1.25
+  memorySafetyFactor: 1.25
+  percentileMethod: linear
+
+  observationWindow: 168h   # 7 days
+
+  # Data sufficiency. A recommendation from three samples is arithmetic applied
+  # to noise; below these thresholds the engine reports INSUFFICIENT_DATA rather
+  # than a confident-looking number.
+  minSamples: 60
+  minDuration: 1h
+  # Fraction of expected samples that must be present. A series can span seven
+  # days and still be mostly gaps.
+  minCoverage: 0.8
+
+  # Never reduce memory for a workload with recent OOM history: its working-set
+  # series is censored at the limit and understates true demand.
+  oomProtection: true
+  # Absent evidence is not evidence of absence.
+  oomRequireEvidence: true
+  oomLookbackRelevance: 336h  # 14 days
+
+  usageExceedsRequestPercentile: p99
+
+  cpuFloor: 10m
+  memoryFloor: 32Mi
+
+  # Withhold CPU reductions for workloads whose peak-to-mean ratio exceeds this:
+  # above it, a percentile over the window does not describe the peaks the
+  # workload reaches. Derived from the experiments; see research/results.md and
+  # the overfitting caveat in research/threats_to_validity.md.
+  maxCpuBurstiness: 20
+  maxMemoryBurstiness: 0
+
+  # Suppress changes below this relative size: applying a 3% change requires a
+  # full rollout, and a tool that emits such advice trains operators to ignore it.
+  minRelativeChange: 0.10
+
+cost:
+  # Per-unit rates are derived from this instance's on-demand price. Override
+  # with explicit rates below if you know your effective price.
+  instanceType: m5.xlarge
+  cpuCostShare: 0.70
+  cpuHourUsd: 0
+  memoryGibHourUsd: 0
+  provider: ""
+  region: ""
+
+analysis:
+  interval: 15m
+  # Bounds simultaneous Prometheus queries. Discovery can find thousands of
+  # workloads; issuing one query per workload at once would overwhelm Prometheus
+  # long before it overwhelmed the optimizer.
+  concurrency: 8
+
+  # DANGER: enabling this lets the optimizer patch resource requests on live
+  # workloads, which restarts their pods. It is off by default and should stay
+  # off until you have reviewed the recommendations by hand. rbac.allowApply must
+  # also be true. See docs/security.md.
+  apply: false
+  # Even in apply mode, refuse to reduce a request by more than this fraction in
+  # one step. A 95% cut may be correct; applying it unattended is not a risk the
+  # tool should take on an operator's behalf.
+  applyMaxDecreaseFraction: 0.5
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    # No CPU limit by default: a CFS quota on a workload whose job is periodic
+    # bursts of analysis would throttle exactly the work it exists to do. Memory
+    # is limited because the analysis holds series in memory and an unbounded
+    # optimizer is a node-level risk.
+    memory: 512Mi
+
+# Security context: non-root, read-only root filesystem, no privilege escalation,
+# all capabilities dropped. Documented in docs/security.md.
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 65532
+  runAsGroup: 65532
+  fsGroup: 65532
+  seccompProfile:
+    type: RuntimeDefault
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  privileged: false
+  capabilities:
+    drop:
+      - ALL
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
+podAnnotations: {}
+podLabels: {}
+
+# Prometheus Operator integration. Off by default because it requires the
+# ServiceMonitor CRD, and a chart that fails to install on a cluster without the
+# operator would be a poor default.
+serviceMonitor:
+  enabled: false
+  interval: 30s
+  scrapeTimeout: 10s
+  labels: {}
+
+# Provision the Grafana dashboard as a ConfigMap for the sidecar to discover.
+grafanaDashboard:
+  enabled: false
+  label: grafana_dashboard
+  labelValue: "1"
+  namespace: ""

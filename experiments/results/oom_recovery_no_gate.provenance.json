@@ -1,0 +1,62 @@
+{
+  "provenance": {
+    "git_commit": "c214eadd9bcd9269162d97c17354f808d69348ea",
+    "git_dirty": true,
+    "config_name": "oom_recovery_no_gate",
+    "config_hash": "c94b545baece8b0d",
+    "started_at": "2026-09-19T09:40:17.105771Z",
+    "finished_at": "2026-09-19T09:40:19.316966Z",
+    "duration_ms": 2211,
+    "go_version": "go1.27.1",
+    "os": "darwin",
+    "arch": "arm64",
+    "tool_version": "dev",
+    "cost_model": "aws/us-east-1/m5.xlarge",
+    "conditions": 1600,
+    "records": 1600
+  },
+  "config": {
+    "name": "oom_recovery_no_gate",
+    "description": "Control for the OOM-protection ablation: the same already-failing population with the gate disabled.\n",
+    "workloads": [],
+    "cpu_strategies": [
+      "p95"
+    ],
+    "memory_strategies": [
+      "mean",
+      "p95",
+      "p99",
+      "max"
+    ],
+    "observation_windows": [
+      "24h0m0s"
+    ],
+    "safety_factors": [
+      1,
+      1.15,
+      1.25,
+      1.5
+    ],
+    "seeds": 10,
+    "base_seed": 20250901,
+    "trace_duration": "96h0m0s",
+    "step": "30s",
+    "evaluation_horizon": "24h0m0s",
+    "percentile_method": "linear",
+    "disable_oom_protection": true,
+    "disable_usage_exceeds": false,
+    "disable_floors": false,
+    "disable_min_change": false,
+    "disable_rounding": false,
+    "unified_strategy": false,
+    "feasibility": {
+      "max_oom_kills": 0,
+      "max_cpu_throttle_fraction": 0.01
+    },
+    "cost_instance": "m5.xlarge",
+    "cpu_cost_share": 0,
+    "stability_recomputations": 0,
+    "declared_cpu_scale": 0,
+    "declared_memory_scale": 0.35
+  }
+}

@@ -171,7 +171,7 @@ func (s *Service) Analyze(ctx context.Context) error {
 		"workloads", len(recs), "errors", len(errs),
 		"current_monthly_usd", summary.CurrentMonthlyUSD,
 		"savings_monthly_usd", summary.MonthlySavingsUSD,
-		"duration", time.Since(start))
+		"duration", time.Since(start).String())
 	return nil
 }
 

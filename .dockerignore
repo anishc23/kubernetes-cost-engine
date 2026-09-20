@@ -1,0 +1,8 @@
+.git
+.venv
+experiments/results
+analysis/figures
+analysis/tables
+*.md
+bin
+dist

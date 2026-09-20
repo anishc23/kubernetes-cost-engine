@@ -165,7 +165,7 @@ func (r *Runner) Run(ctx context.Context) (*Result, error) {
 	prov.DurationMS = prov.FinishedAt.Sub(prov.StartedAt).Milliseconds()
 	prov.Records = len(records)
 	r.log.Info("experiment complete",
-		"name", r.cfg.Name, "records", len(records), "duration", prov.FinishedAt.Sub(prov.StartedAt))
+		"name", r.cfg.Name, "records", len(records), "duration", prov.FinishedAt.Sub(prov.StartedAt).String())
 	return &Result{Provenance: prov, Config: r.cfg, Records: records}, nil
 }
 
@@ -189,6 +189,12 @@ func (r *Runner) evaluate(c condition, runID string) (Record, error) {
 	if err != nil {
 		return Record{}, err
 	}
+	// Scale the declared configuration before generation, so the trace's own
+	// record of what was deployed matches what the engine is told.
+	cpuScale, memScale := r.cfg.declaredScales()
+	spec.DeclaredCPU *= cpuScale
+	spec.DeclaredMemory *= memScale
+
 	full, err := simulator.Generate(spec)
 	if err != nil {
 		return Record{}, err
@@ -364,6 +370,9 @@ func (r *Runner) policyFor(c condition) recommender.Policy {
 	// meaningful at any window length.
 	p.MinSamples = 20
 	p.MinDuration = 30 * time.Minute
+
+	p.MaxCPUBurstiness = r.cfg.MaxCPUBurstiness
+	p.MaxMemoryBurstiness = r.cfg.MaxMemoryBurstiness
 
 	if r.cfg.DisableOOMProtection {
 		p.OOMProtection = false

@@ -148,7 +148,7 @@ func TestMemoryString(t *testing.T) {
 		{1610612736, "1536Mi"}, // 1.5Gi renders as MiB for comparability
 		{1048576, "1Mi"},
 		{2048, "2Ki"},
-		{1500, "1500"},
+		{1500, "1.5Ki"}, // not evenly divisible: rendered readably, still a valid quantity
 	}
 	for _, c := range cases {
 		if got := MemoryString(c.in); got != c.want {
@@ -184,5 +184,65 @@ func TestUnitHelpers(t *testing.T) {
 	}
 	if got := model.Bytes(536870912).Mebibytes(); got != 512 {
 		t.Errorf("Mebibytes() = %v want 512", got)
+	}
+}
+
+// Observed statistics are never round numbers of bytes. Rendering them as raw
+// byte counts beside a recommendation in MiB makes the two incomparable, which
+// defeats the purpose of showing the evidence.
+func TestMemoryStringRendersNonRoundValuesReadably(t *testing.T) {
+	cases := []struct {
+		in   model.Bytes
+		want string
+	}{
+		{229332309, "218.7Mi"}, // an observed mean working set
+		{434124390, "414.0Mi"},
+		{1500, "1.5Ki"},
+		{500, "500"}, // below a KiB: raw is the only sensible form
+	}
+	for _, c := range cases {
+		if got := MemoryString(c.in); got != c.want {
+			t.Errorf("MemoryString(%v) = %q, want %q", c.in, got, c.want)
+		}
+	}
+	// Exact values must keep their exact rendering.
+	for _, c := range []struct {
+		in   model.Bytes
+		want string
+	}{
+		{1073741824, "1Gi"},
+		{536870912, "512Mi"},
+		{1610612736, "1536Mi"},
+	} {
+		if got := MemoryString(c.in); got != c.want {
+			t.Errorf("MemoryString(%v) = %q, want %q (exact values must not gain a decimal)", c.in, got, c.want)
+		}
+	}
+}
+
+// Two statistics of the same series must render in the same unit, or they cannot
+// be compared at a glance — which is the point of showing them together.
+func TestMemoryStringUsesMiBConsistentlyAboveOneMiB(t *testing.T) {
+	// 334856Ki is Ki-divisible but well above a MiB; it must not render in Ki
+	// beside a mean rendered in MiB.
+	if got := MemoryString(334856 * 1024); got != "327.0Mi" {
+		t.Errorf("MemoryString(334856Ki) = %q, want MiB rendering", got)
+	}
+	// Sub-MiB values still use Ki, where it is the readable unit.
+	if got := MemoryString(2048); got != "2Ki" {
+		t.Errorf("MemoryString(2048) = %q, want 2Ki", got)
+	}
+}
+
+// Whatever form it takes, the output must remain a valid Kubernetes quantity so
+// that nothing downstream has to special-case it.
+func TestMemoryStringAlwaysParsesAsAQuantity(t *testing.T) {
+	for _, v := range []model.Bytes{
+		1, 500, 1500, 1048576, 229332309, 434124390, 1073741824, 1610612736,
+	} {
+		s := MemoryString(v)
+		if _, err := ParseMemory(s); err != nil {
+			t.Errorf("MemoryString(%v) = %q, which is not a parseable quantity: %v", v, s, err)
+		}
 	}
 }

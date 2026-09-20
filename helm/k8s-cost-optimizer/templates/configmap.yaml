@@ -1,0 +1,56 @@
+{{- include "k8s-cost-optimizer.validate" . }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "k8s-cost-optimizer.fullname" . }}
+  labels:
+    {{- include "k8s-cost-optimizer.labels" . | nindent 4 }}
+data:
+  config.yaml: |
+    log:
+      level: {{ .Values.log.level }}
+      format: {{ .Values.log.format }}
+    server:
+      addr: ":{{ .Values.service.port }}"
+      metrics_addr: ":{{ .Values.service.metricsPort }}"
+    kubernetes:
+      namespaces: {{ toJson .Values.kubernetes.namespaces }}
+      exclude_namespaces: {{ toJson .Values.kubernetes.excludeNamespaces }}
+      label_selector: {{ .Values.kubernetes.labelSelector | quote }}
+      include_daemonsets: {{ .Values.kubernetes.includeDaemonSets }}
+    prometheus:
+      address: {{ .Values.prometheus.address | quote }}
+      timeout: {{ .Values.prometheus.timeout | quote }}
+      step: {{ .Values.prometheus.step | quote }}
+      bearer_token_file: {{ .Values.prometheus.bearerTokenFile | quote }}
+    policy:
+      cpu_strategy: {{ .Values.policy.cpuStrategy | quote }}
+      memory_strategy: {{ .Values.policy.memoryStrategy | quote }}
+      cpu_safety_factor: {{ .Values.policy.cpuSafetyFactor }}
+      memory_safety_factor: {{ .Values.policy.memorySafetyFactor }}
+      percentile_method: {{ .Values.policy.percentileMethod | quote }}
+      observation_window: {{ .Values.policy.observationWindow | quote }}
+      min_samples: {{ .Values.policy.minSamples }}
+      min_duration: {{ .Values.policy.minDuration | quote }}
+      min_coverage: {{ .Values.policy.minCoverage }}
+      oom_protection: {{ .Values.policy.oomProtection }}
+      oom_require_evidence: {{ .Values.policy.oomRequireEvidence }}
+      oom_lookback_relevance: {{ .Values.policy.oomLookbackRelevance | quote }}
+      usage_exceeds_request_percentile: {{ .Values.policy.usageExceedsRequestPercentile | quote }}
+      cpu_floor: {{ .Values.policy.cpuFloor | quote }}
+      memory_floor: {{ .Values.policy.memoryFloor | quote }}
+      max_cpu_burstiness: {{ .Values.policy.maxCpuBurstiness }}
+      max_memory_burstiness: {{ .Values.policy.maxMemoryBurstiness }}
+      min_relative_change: {{ .Values.policy.minRelativeChange }}
+    cost:
+      instance_type: {{ .Values.cost.instanceType | quote }}
+      cpu_cost_share: {{ .Values.cost.cpuCostShare }}
+      cpu_hour_usd: {{ .Values.cost.cpuHourUsd }}
+      memory_gib_hour_usd: {{ .Values.cost.memoryGibHourUsd }}
+      provider: {{ .Values.cost.provider | quote }}
+      region: {{ .Values.cost.region | quote }}
+    analysis:
+      interval: {{ .Values.analysis.interval | quote }}
+      concurrency: {{ .Values.analysis.concurrency }}
+      apply: {{ .Values.analysis.apply }}
+      apply_max_decrease_fraction: {{ .Values.analysis.applyMaxDecreaseFraction }}

@@ -1,0 +1,13 @@
+Effect of observation-window length, with every window scored on the same held-out 24-hour
+horizon so the comparison isolates history length rather than comparing different futures.
+Volatility is the median absolute base-2 log ratio between consecutive recommendations over
+eight scheduled recomputations; a value of 1.0 would mean the typical recomputation doubled
+or halved the request.
+
+Window length acts on the three axes in different directions. Savings under the max policy
+*fall* with a longer window (55% at 1h to 33% at 72h), because a
+longer history contains rarer and taller peaks and so a maximum-based target grows.
+Reliability improves monotonically. Volatility falls by more than an order of magnitude
+(p95: 0.070 at 1h to effectively zero at 72h). A short window therefore does not
+simply trade accuracy for freshness: it produces a recommender that is simultaneously more
+aggressive, less reliable, and operationally unstable.

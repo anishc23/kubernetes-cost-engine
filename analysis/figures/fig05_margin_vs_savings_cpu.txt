@@ -1,0 +1,9 @@
+CPU savings and residual degradation against the safety factor, medians over 5 realisations
+per condition. The risk panel plots the 90th percentile of the unserved-work fraction rather
+than its median, because the median is zero for most conditions and a metric that is zero
+almost everywhere cannot show the shape of the tail that matters.
+
+Increasing the margin buys progressively less: beyond roughly 1.2x the residual degradation
+of each policy is nearly flat while savings continue to fall linearly. The flat portion is
+not noise — it is demand that sits structurally above the percentile, which no multiplier
+applied to that percentile can reach.

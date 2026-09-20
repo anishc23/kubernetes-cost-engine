@@ -1,0 +1,11 @@
+Median savings by CPU strategy at a 1.15x safety factor, with 95% percentile-bootstrap
+intervals over 10 trace realisations per condition. Left: savings as reported. Right:
+savings counted only where the condition met the reliability constraint (no OOMKills and
+at most 1% of demanded CPU work unserved).
+
+The two panels rank the strategies differently. On reported savings, the mean and p50
+policies lead (69% and 70%);
+under the constraint they fall to 0% and
+0% because much of what they saved was paid for with
+degradation. Reporting savings without a reliability constraint therefore does not merely
+overstate the benefit, it reverses the ordering.

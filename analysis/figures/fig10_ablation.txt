@@ -1,0 +1,15 @@
+Ablation results.
+
+Left: the achievable savings/reliability space when CPU and memory may use different
+strategies against when they are forced to share one. The resource-specific space extends
+further along both axes, and in particular contains fully-feasible configurations that the
+unified space does not reach.
+
+Right: OOM protection evaluated on workloads deployed below their true peak demand, so that
+they are already being killed and their observed working-set series is censored at the limit.
+On this population the gate fires on 11% of conditions and reduces kill episodes
+from 140 to 137 per condition, at no cost in savings. On the
+over-provisioned population of the main experiment the gate never fires at all, because there
+is no OOM history for it to act on — a result reported in full in research/results.md,
+because the first version of this ablation was incapable of observing the component it was
+meant to test.

@@ -67,17 +67,47 @@ type Policy struct {
 
 // DefaultPolicy is the engine's shipped configuration.
 //
-// The values encode the conservative stance documented in docs/security.md and
-// research/methodology.md: p95 with a 1.15x margin for CPU (compressible,
-// recoverable) and the observed maximum with a 1.25x margin for memory
-// (incompressible, fatal). These are defaults to be evaluated by the
-// experiments, not conclusions from them; results.md reports whether they hold
-// up per workload class.
+// These values are experimental results, not design intuitions, and they replaced
+// the intuitions the project started with.
+//
+// The original default was CPU p95 x1.15 with memory max x1.25, chosen on the
+// reasoning that CPU degradation is recoverable and so tolerates a lower
+// percentile. The main experiment refuted the CPU half of that: measured against
+// held-out demand, p95 left 34% of demanded CPU work unserved on the bursty class
+// and 8.5% on the spiky class. It was a defensible hypothesis and it was wrong.
+//
+// The revision is derived from the same data:
+//
+//   - CPU p99 at a 1.25x margin is safe on every evaluated class except the
+//     spiky one, where peaks are rarer than 1% of samples and therefore sit above
+//     p99 by construction.
+//   - Observed burstiness (max/mean, which the engine already computes) separates
+//     that class cleanly: it measures 38-43 while every other class, including the
+//     bursty one at 13.0, measures below 14. The instability gate at a threshold of
+//     20 therefore withholds the reduction on exactly the class where p99 fails.
+//   - Memory max at 1.25x reaches full survival; p95 does not, at any margin,
+//     because on the bursty-memory class p95 of the working set is a small fraction
+//     of its peak.
+//
+// The combination is the only configuration evaluated that was feasible on every
+// workload class and every seed while still producing meaningful savings (median
+// 34%; see research/results.md, and experiments/configs/validate_default.yaml for
+// the confirmatory run).
+//
+// The cost of that safety is real and is not hidden: a p95 CPU policy saves
+// roughly 63% at a 1.25x margin against this configuration's 34%, and is feasible
+// on 70% of conditions rather than 100%. An operator who knows their workloads are
+// not spiky can reasonably choose the cheaper policy. The default is conservative
+// because the engine cannot know that on their behalf.
+//
+// The burstiness threshold was selected on ten synthetic classes and has not been
+// validated against production traces; research/threats_to_validity.md treats that
+// as the most likely place this configuration fails to generalise.
 func DefaultPolicy() Policy {
 	return Policy{
-		CPUStrategy:                   "p95",
+		CPUStrategy:                   "p99",
 		MemoryStrategy:                "max",
-		CPUSafetyFactor:               1.15,
+		CPUSafetyFactor:               1.25,
 		MemorySafetyFactor:            1.25,
 		PercentileMethod:              stats.LinearInterpolation,
 		ObservationWindow:             7 * 24 * time.Hour,
@@ -90,10 +120,15 @@ func DefaultPolicy() Policy {
 		UsageExceedsRequestPercentile: "p99",
 		CPUFloorMilli:                 10,
 		MemoryFloorBytes:              32 * 1024 * 1024,
-		MaxCPUBurstiness:              0, // disabled by default; studied as an ablation
-		MaxMemoryBurstiness:           0,
-		MinRelativeChange:             0.10,
-		Rounding:                      true,
+		// Withhold CPU reductions for workloads whose peak-to-mean ratio exceeds
+		// 20x: above that, a percentile computed over the window does not
+		// describe the peaks the workload actually reaches. Memory has no
+		// equivalent threshold because the memory policy is already the observed
+		// maximum, which no burstiness measure would improve on.
+		MaxCPUBurstiness:    20,
+		MaxMemoryBurstiness: 0,
+		MinRelativeChange:   0.10,
+		Rounding:            true,
 	}
 }
 
@@ -302,10 +337,28 @@ func (e *Engine) recommendResource(
 			EvidencePresent: evPresent,
 			Sufficiency:     suff,
 		})
-		// A gate may never lower the target: safety mechanisms only ever hold
-		// the line or raise it.
-		if res.Target < target && !res.Block {
-			panic(fmt.Sprintf("gate %s lowered target from %v to %v without blocking", g.ID(), target, res.Target))
+		// The gate-chain safety invariant, stated precisely:
+		//
+		//	res.Target >= min(in.Target, in.Current)
+		//
+		// A gate may hold the line at the current request, raise a target, or
+		// cancel a proposed change — but it may never produce a configuration
+		// more aggressive than both what the strategy proposed and what is
+		// already deployed. That is the property which makes the chain a safety
+		// mechanism rather than an additional source of risk.
+		//
+		// The bound is min() rather than the incoming target because cancelling a
+		// marginal *increase* legitimately lowers the target: MinChangeGate
+		// declining a 9% increase returns the current request, which is smaller
+		// than the proposal but is the configuration the workload is already
+		// running under safely. An earlier version of this assertion used the
+		// incoming target alone and fired on exactly that case during an
+		// experiment run.
+		floor := math.Min(target, current)
+		if res.Target < floor-1e-9 {
+			panic(fmt.Sprintf(
+				"gate %s violated the safety invariant: target %v is below min(proposed %v, current %v)",
+				g.ID(), res.Target, target, current))
 		}
 		if res.Fired {
 			firedGates = append(firedGates, g.ID())

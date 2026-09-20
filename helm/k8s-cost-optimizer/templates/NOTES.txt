@@ -1,0 +1,40 @@
+k8s-cost-optimizer {{ .Chart.AppVersion }} installed as {{ include "k8s-cost-optimizer.fullname" . }}.
+
+MODE: {{ if .Values.analysis.apply }}*** APPLY — recommendations WILL be written to the cluster and pods WILL restart ***{{ else }}recommendation-only (no cluster mutation){{ end }}
+
+Policy: CPU {{ .Values.policy.cpuStrategy }} x{{ .Values.policy.cpuSafetyFactor }}, memory {{ .Values.policy.memoryStrategy }} x{{ .Values.policy.memorySafetyFactor }}, over a {{ .Values.policy.observationWindow }} window.
+
+1. Wait for the first analysis cycle (it runs immediately on startup):
+
+   kubectl -n {{ .Release.Namespace }} rollout status deploy/{{ include "k8s-cost-optimizer.fullname" . }}
+
+2. Port-forward the API:
+
+   kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "k8s-cost-optimizer.fullname" . }} {{ .Values.service.port }}:{{ .Values.service.port }}
+
+3. Look at what it found:
+
+   curl -s localhost:{{ .Values.service.port }}/api/v1/summary | jq
+   curl -s localhost:{{ .Values.service.port }}/api/v1/recommendations | jq '.recommendations[0]'
+
+Every recommendation carries the evidence behind it: the observed statistics, the
+strategy and margin used, and a reason. Recommendations the engine withheld appear
+as BLOCKED or INSUFFICIENT_DATA with an explanation — read those first, since they
+are where the engine is telling you something it is not confident about.
+
+{{ if not .Values.analysis.apply }}
+This release does NOT modify your cluster. Before enabling apply mode, read
+docs/security.md and note that it requires BOTH analysis.apply=true and
+rbac.allowApply=true — the two are separate on purpose.
+{{ end }}
+{{- if eq .Values.prometheus.address "http://prometheus-server.monitoring.svc.cluster.local" }}
+
+NOTE: prometheus.address is still the chart default. If that is not your
+Prometheus, every workload will report INSUFFICIENT_DATA. Check with:
+
+   curl -s localhost:{{ .Values.service.port }}/readyz | jq
+{{- end }}
+
+Savings figures are allocation-based estimates: they price reserved capacity, not
+cloud invoices, and are an upper bound on what you can realise. See
+docs/cost-model.md.

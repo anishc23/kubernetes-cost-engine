@@ -1,0 +1,28 @@
+# Build output
+/bin/
+/dist/
+/optimizer
+/koctl
+/experiment
+/workload-gen
+*.test
+*.out
+
+# Python analysis environment
+.venv/
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+
+# Generated experiment data.
+#
+# Result CSV/JSON files are NOT ignored: they are the evidence behind the report,
+# they are small (a few MB), and a reader must be able to check the figures
+# against them without re-running anything. Regenerating them is `make
+# experiments`, which takes about two minutes.
+
+# Local editor and OS noise
+.DS_Store
+.idea/
+.vscode/
+*.swp

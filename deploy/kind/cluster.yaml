@@ -1,0 +1,24 @@
+# kind cluster for end-to-end validation.
+#
+# Single node: the optimizer's correctness does not depend on node count, and a
+# one-node cluster starts in well under a minute, which matters for a test loop
+# people will actually run.
+#
+# No kubeadm taint patch here: kind already removes the control-plane taint on a
+# single-node cluster. Setting `taints: []` explicitly prevents the taint from
+# being applied in the first place, and kind's own removal step then fails with
+# "taint not found", aborting cluster creation.
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+name: cost-optimizer
+nodes:
+  - role: control-plane
+    extraPortMappings:
+      # Prometheus, for inspecting metrics from the host during a test run.
+      - containerPort: 30090
+        hostPort: 30090
+        protocol: TCP
+      # The optimizer API.
+      - containerPort: 30080
+        hostPort: 30080
+        protocol: TCP

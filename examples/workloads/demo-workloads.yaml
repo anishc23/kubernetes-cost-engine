@@ -1,0 +1,176 @@
+# Demo workloads for end-to-end validation.
+#
+# Each runs the synthetic load generator (cmd/workload-gen) with the same
+# generative parameters as the corresponding class in the simulator catalog, and
+# each is deliberately over-provisioned so the optimizer has waste to find.
+#
+# These produce REAL CPU and memory load, observed through the real
+# cAdvisor -> Prometheus -> optimizer path. That validates the collection
+# machinery. It does not provide ground truth — the cluster interferes with what
+# the generator achieves — which is why the quantitative findings come from the
+# simulation study instead. See research/experimental_setup.md.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: demo
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: stable-cpu
+  namespace: demo
+  labels: { workload-class: stable-cpu }
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: stable-cpu }
+  template:
+    metadata:
+      labels: { app: stable-cpu, workload-class: stable-cpu }
+    spec:
+      containers:
+        - name: app
+          image: k8s-cost-optimizer/workload-gen:dev
+          imagePullPolicy: IfNotPresent
+          args:
+            - --mode=stable-cpu
+            - --baseline-cpu-milli=200
+            - --baseline-memory-mib=256
+            - --addr=:8081
+          ports: [{ containerPort: 8081 }]
+          resources:
+            # 5x over-provisioned on CPU, 4x on memory: the engine should find
+            # this easily, and if it does not, something upstream is broken.
+            requests: { cpu: "1", memory: 1Gi }
+            limits:   { cpu: "1", memory: 1Gi }
+          readinessProbe:
+            httpGet: { path: /healthz, port: 8081 }
+            initialDelaySeconds: 3
+            periodSeconds: 5
+          securityContext:
+            runAsNonRoot: true
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: ["ALL"] }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: bursty-cpu
+  namespace: demo
+  labels: { workload-class: bursty-cpu }
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: bursty-cpu }
+  template:
+    metadata:
+      labels: { app: bursty-cpu, workload-class: bursty-cpu }
+    spec:
+      containers:
+        - name: app
+          image: k8s-cost-optimizer/workload-gen:dev
+          imagePullPolicy: IfNotPresent
+          args:
+            - --mode=bursty-cpu
+            - --baseline-cpu-milli=80
+            - --burst-cpu-milli=800
+            # Compressed relative to the simulator catalog (30s every 15m) so
+            # that a short test run still observes several bursts.
+            - --burst-duration=20s
+            - --burst-interval=2m
+            - --baseline-memory-mib=320
+            - --addr=:8081
+          ports: [{ containerPort: 8081 }]
+          resources:
+            requests: { cpu: "1500m", memory: 1Gi }
+            limits:   { cpu: "1500m", memory: 1Gi }
+          readinessProbe:
+            httpGet: { path: /healthz, port: 8081 }
+            initialDelaySeconds: 3
+            periodSeconds: 5
+          securityContext:
+            runAsNonRoot: true
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: ["ALL"] }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: growing-memory
+  namespace: demo
+  labels: { workload-class: growing-memory }
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: growing-memory }
+  template:
+    metadata:
+      labels: { app: growing-memory, workload-class: growing-memory }
+    spec:
+      containers:
+        - name: app
+          image: k8s-cost-optimizer/workload-gen:dev
+          imagePullPolicy: IfNotPresent
+          args:
+            - --mode=growing-memory
+            - --baseline-cpu-milli=100
+            - --baseline-memory-mib=200
+            - --growth-factor=2.0
+            - --duration=30m
+            - --addr=:8081
+          ports: [{ containerPort: 8081 }]
+          resources:
+            requests: { cpu: 500m, memory: 1Gi }
+            limits:   { cpu: 500m, memory: 1Gi }
+          readinessProbe:
+            httpGet: { path: /healthz, port: 8081 }
+            initialDelaySeconds: 3
+            periodSeconds: 5
+          securityContext:
+            runAsNonRoot: true
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: ["ALL"] }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: idle
+  namespace: demo
+  labels: { workload-class: idle }
+spec:
+  # Two replicas, to exercise the per-replica cost arithmetic.
+  replicas: 2
+  selector:
+    matchLabels: { app: idle }
+  template:
+    metadata:
+      labels: { app: idle, workload-class: idle }
+    spec:
+      containers:
+        - name: app
+          image: k8s-cost-optimizer/workload-gen:dev
+          imagePullPolicy: IfNotPresent
+          args:
+            - --mode=idle
+            - --baseline-cpu-milli=5
+            - --baseline-memory-mib=32
+            - --addr=:8081
+          ports: [{ containerPort: 8081 }]
+          resources:
+            # ~100x over-provisioned: the extreme case, where percentile
+            # policies produce implausibly small targets and the floor gate must
+            # intervene.
+            requests: { cpu: 500m, memory: 512Mi }
+            limits:   { cpu: 500m, memory: 512Mi }
+          readinessProbe:
+            httpGet: { path: /healthz, port: 8081 }
+            initialDelaySeconds: 3
+            periodSeconds: 5
+          securityContext:
+            runAsNonRoot: true
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: ["ALL"] }

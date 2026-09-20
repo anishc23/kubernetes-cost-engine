@@ -1,0 +1,9 @@
+Signed relative error of the recommended request against ground-truth demand, median over
+10 realisations, at a 1.15x safety factor. Zero is exactly sized; negative is
+under-provisioned. CPU error is measured against true p99 demand and memory error against
+true maximum demand, because those are the operating targets the two resources have: a CPU
+request below p99 causes throttling, while a memory request below the maximum causes a kill.
+
+The symmetric-log vertical axis is necessary because errors span from a few percent on the
+stable classes to several thousand percent on the idle class, where percentile policies
+produce targets far below a floor-constrained minimum.

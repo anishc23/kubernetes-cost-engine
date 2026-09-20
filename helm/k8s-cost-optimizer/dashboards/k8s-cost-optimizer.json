@@ -1,0 +1,238 @@
+{
+  "title": "Kubernetes Cost Optimizer",
+  "uid": "k8s-cost-optimizer",
+  "tags": ["kubernetes", "cost", "right-sizing"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "1m",
+  "time": { "from": "now-6h", "to": "now" },
+  "templating": {
+    "list": [
+      {
+        "name": "datasource",
+        "type": "datasource",
+        "query": "prometheus",
+        "current": {},
+        "hide": 0,
+        "label": "Data source"
+      }
+    ]
+  },
+  "panels": [
+    {
+      "type": "row",
+      "title": "Cost",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 },
+      "collapsed": false
+    },
+    {
+      "type": "stat",
+      "title": "Current monthly cost (allocation-based)",
+      "description": "Estimated monthly cost of the CPU and memory currently reserved by analysed workloads. This prices reserved capacity, not your cloud bill.",
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": { "h": 5, "w": 6, "x": 0, "y": 1 },
+      "targets": [
+        { "expr": "optimizer_estimated_monthly_cost_usd", "legendFormat": "current", "refId": "A" }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "currencyUSD", "decimals": 0, "color": { "mode": "fixed", "fixedColor": "blue" } },
+        "overrides": []
+      },
+      "options": { "graphMode": "area", "textMode": "value", "reduceOptions": { "calcs": ["lastNotNull"] } }
+    },
+    {
+      "type": "stat",
+      "title": "Identified monthly savings",
+      "description": "Upper bound on the monthly reduction if every recommendation were applied. Realising it requires the freed capacity to let the cluster run fewer nodes; see docs/cost-model.md.",
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": { "h": 5, "w": 6, "x": 6, "y": 1 },
+      "targets": [
+        { "expr": "optimizer_estimated_monthly_savings_usd", "legendFormat": "savings", "refId": "A" }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyUSD", "decimals": 0,
+          "thresholds": { "mode": "absolute", "steps": [
+            { "color": "text", "value": null },
+            { "color": "green", "value": 1 }
+          ]}
+        },
+        "overrides": []
+      },
+      "options": { "graphMode": "area", "textMode": "value", "reduceOptions": { "calcs": ["lastNotNull"] } }
+    },
+    {
+      "type": "gauge",
+      "title": "Reserved capacity that is reducible",
+      "description": "Identified savings as a fraction of current allocation-based cost.",
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": { "h": 5, "w": 6, "x": 12, "y": 1 },
+      "targets": [
+        {
+          "expr": "100 * optimizer_estimated_monthly_savings_usd / clamp_min(optimizer_estimated_monthly_cost_usd, 1)",
+          "legendFormat": "reducible", "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent", "min": 0, "max": 100, "decimals": 1,
+          "thresholds": { "mode": "absolute", "steps": [
+            { "color": "green", "value": null },
+            { "color": "yellow", "value": 25 },
+            { "color": "orange", "value": 50 }
+          ]}
+        },
+        "overrides": []
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Workloads analysed",
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": { "h": 5, "w": 6, "x": 18, "y": 1 },
+      "targets": [
+        { "expr": "optimizer_workloads_discovered", "legendFormat": "workloads", "refId": "A" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "short", "decimals": 0 }, "overrides": [] },
+      "options": { "graphMode": "none", "textMode": "value", "reduceOptions": { "calcs": ["lastNotNull"] } }
+    },
+    {
+      "type": "row",
+      "title": "Recommendations",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 6 },
+      "collapsed": false
+    },
+    {
+      "type": "piechart",
+      "title": "CPU decisions",
+      "description": "What the engine decided for CPU. A large NO_CHANGE or BLOCKED share is informative, not a malfunction: it means the engine declined to act where the evidence did not support it.",
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": { "h": 8, "w": 6, "x": 0, "y": 7 },
+      "targets": [
+        {
+          "expr": "sum by (decision) (increase(optimizer_recommendations_generated_total{resource=\"cpu\"}[1h]))",
+          "legendFormat": "{{decision}}", "refId": "A"
+        }
+      ],
+      "options": { "legend": { "displayMode": "table", "placement": "right", "values": ["value"] } }
+    },
+    {
+      "type": "piechart",
+      "title": "Memory decisions",
+      "description": "BLOCKED here usually means OOM protection fired: the workload has recent OOM history, so its working-set series is censored and understates true demand.",
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": { "h": 8, "w": 6, "x": 6, "y": 7 },
+      "targets": [
+        {
+          "expr": "sum by (decision) (increase(optimizer_recommendations_generated_total{resource=\"memory\"}[1h]))",
+          "legendFormat": "{{decision}}", "refId": "A"
+        }
+      ],
+      "options": { "legend": { "displayMode": "table", "placement": "right", "values": ["value"] } }
+    },
+    {
+      "type": "timeseries",
+      "title": "Safety gates fired",
+      "description": "Which safety rules withheld or modified a recommendation. A spike in oom-protection means workloads started failing. A spike in data-sufficiency usually means the metrics pipeline broke, not that the workloads changed.",
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 7 },
+      "targets": [
+        {
+          "expr": "sum by (gate, resource) (rate(optimizer_gates_fired_total[5m]))",
+          "legendFormat": "{{gate}} ({{resource}})", "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "ops", "custom": { "drawStyle": "line", "fillOpacity": 10, "lineWidth": 2 } },
+        "overrides": []
+      }
+    },
+    {
+      "type": "row",
+      "title": "Optimizer health",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 15 },
+      "collapsed": false
+    },
+    {
+      "type": "stat",
+      "title": "Time since last successful analysis",
+      "description": "Recommendations served after a long gap describe a cluster that no longer exists. Alert on this.",
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": { "h": 5, "w": 6, "x": 0, "y": 16 },
+      "targets": [
+        { "expr": "time() - optimizer_last_analysis_timestamp_seconds", "legendFormat": "staleness", "refId": "A" }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "thresholds": { "mode": "absolute", "steps": [
+            { "color": "green", "value": null },
+            { "color": "yellow", "value": 1800 },
+            { "color": "red", "value": 3600 }
+          ]}
+        },
+        "overrides": []
+      },
+      "options": { "graphMode": "none", "textMode": "value", "reduceOptions": { "calcs": ["lastNotNull"] } }
+    },
+    {
+      "type": "timeseries",
+      "title": "Analysis cycle duration",
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": { "h": 5, "w": 9, "x": 6, "y": 16 },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(optimizer_analysis_duration_seconds_bucket[10m])))",
+          "legendFormat": "p95", "refId": "A"
+        },
+        {
+          "expr": "histogram_quantile(0.5, sum by (le) (rate(optimizer_analysis_duration_seconds_bucket[10m])))",
+          "legendFormat": "median", "refId": "B"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "s", "custom": { "drawStyle": "line", "lineWidth": 2 } }, "overrides": [] }
+    },
+    {
+      "type": "timeseries",
+      "title": "Prometheus query errors",
+      "description": "Query failures by kind and cause. Sustained errors mean the recommendations being served are stale.",
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": { "h": 5, "w": 9, "x": 15, "y": 16 },
+      "targets": [
+        {
+          "expr": "sum by (query, reason) (rate(optimizer_prometheus_query_errors_total[5m]))",
+          "legendFormat": "{{query}} / {{reason}}", "refId": "A"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "ops", "custom": { "drawStyle": "line", "lineWidth": 2 } }, "overrides": [] }
+    },
+    {
+      "type": "timeseries",
+      "title": "Prometheus query latency",
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": { "h": 6, "w": 12, "x": 0, "y": 21 },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum by (le, query) (rate(optimizer_prometheus_query_duration_seconds_bucket[5m])))",
+          "legendFormat": "p95 {{query}}", "refId": "A"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "s", "custom": { "drawStyle": "line", "lineWidth": 2 } }, "overrides": [] }
+    },
+    {
+      "type": "timeseries",
+      "title": "Samples returned per series",
+      "description": "A collapse toward zero indicates a metrics pipeline problem, which would otherwise surface only as a wave of INSUFFICIENT_DATA decisions.",
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": { "h": 6, "w": 12, "x": 12, "y": 21 },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.5, sum by (le) (rate(optimizer_prometheus_samples_returned_bucket[10m])))",
+          "legendFormat": "median samples", "refId": "A"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "short", "custom": { "drawStyle": "line", "lineWidth": 2 } }, "overrides": [] }
+    }
+  ]
+}

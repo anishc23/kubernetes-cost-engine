@@ -1,0 +1,58 @@
+{
+  "provenance": {
+    "git_commit": "c214eadd9bcd9269162d97c17354f808d69348ea",
+    "git_dirty": true,
+    "config_name": "percentile_method_nearest_rank",
+    "config_hash": "c8a1b16f4d854fe4",
+    "started_at": "2026-09-19T09:36:52.173084Z",
+    "finished_at": "2026-09-19T09:36:54.778294Z",
+    "duration_ms": 2605,
+    "go_version": "go1.27.1",
+    "os": "darwin",
+    "arch": "arm64",
+    "tool_version": "dev",
+    "cost_model": "aws/us-east-1/m5.xlarge",
+    "conditions": 1200,
+    "records": 1200
+  },
+  "config": {
+    "name": "percentile_method_nearest_rank",
+    "description": "Nearest-rank percentile estimator, for comparison against the linear default.",
+    "workloads": [],
+    "cpu_strategies": [
+      "p95",
+      "p99"
+    ],
+    "memory_strategies": [
+      "p95",
+      "p99"
+    ],
+    "observation_windows": [
+      "1h0m0s",
+      "6h0m0s",
+      "24h0m0s"
+    ],
+    "safety_factors": [
+      1.15
+    ],
+    "seeds": 10,
+    "base_seed": 20250902,
+    "trace_duration": "168h0m0s",
+    "step": "30s",
+    "evaluation_horizon": "12h0m0s",
+    "percentile_method": "nearest-rank",
+    "disable_oom_protection": false,
+    "disable_usage_exceeds": false,
+    "disable_floors": false,
+    "disable_min_change": false,
+    "disable_rounding": false,
+    "unified_strategy": false,
+    "feasibility": {
+      "max_oom_kills": 0,
+      "max_cpu_throttle_fraction": 0.01
+    },
+    "cost_instance": "m5.xlarge",
+    "cpu_cost_share": 0,
+    "stability_recomputations": 0
+  }
+}

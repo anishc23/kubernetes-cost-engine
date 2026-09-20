@@ -1,0 +1,11 @@
+Per-class risk of each strategy at a 1.25x safety factor, with the two resources side by
+side and both panels oriented so that darker is worse. CPU risk is the fraction of demanded
+work left unserved; memory risk is the fraction of conditions that suffered at least one
+OOMKill.
+
+The two panels do not share a pattern, which is the evidence behind the engine's
+resource-specific design. On CPU, p90 and p95 are safe on most classes and fail only where
+peaks are short and rare. On memory, the same percentiles fail completely on bursty-memory
+while p99 and max succeed everywhere. A single policy applied to both resources would
+either accept memory kills in order to capture CPU savings, or forgo CPU savings in order to
+be safe on memory.

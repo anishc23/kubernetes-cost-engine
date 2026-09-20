@@ -100,6 +100,36 @@ type Config struct {
 	// StabilityRecomputations, when > 1, recomputes each recommendation over
 	// that many successive windows to measure volatility (RQ7).
 	StabilityRecomputations int `json:"stability_recomputations"`
+
+	// DeclaredCPUScale and DeclaredMemoryScale multiply the catalog's declared
+	// requests before the trace is handed to the engine. Zero means 1.0.
+	//
+	// These exist because of a flaw found in the first run of the OOM-protection
+	// ablation. Every catalog workload is deliberately over-provisioned, so at its
+	// declared configuration it never fails; the synthesised reliability evidence
+	// therefore always showed zero OOMKills, the OOM gate could never fire, and the
+	// ablation returned bit-identical results with the gate on and off. The gate was
+	// working correctly and the experiment was incapable of observing it.
+	//
+	// Scaling the declared request below true demand creates the population the gate
+	// actually exists to protect: workloads that are already being killed at their
+	// current size, whose observed working-set series is censored at the limit and
+	// therefore understates what they need. See experiments/configs/oom_recovery.yaml.
+	DeclaredCPUScale    float64 `json:"declared_cpu_scale"`
+	DeclaredMemoryScale float64 `json:"declared_memory_scale"`
+
+	// MaxCPUBurstiness and MaxMemoryBurstiness enable the instability gate,
+	// which withholds reductions for workloads whose usage is too erratic for a
+	// percentile over the available window to describe. Zero leaves the gate
+	// disabled, which is the policy default.
+	//
+	// These are experiment parameters rather than fixed policy because the
+	// threshold has to be derived from evidence: the main experiment showed that
+	// observed burstiness separates the classes where a p99 CPU policy is safe
+	// from the one where it is not, and validate_default.yaml tests whether a
+	// threshold chosen on that basis actually helps.
+	MaxCPUBurstiness    float64 `json:"max_cpu_burstiness"`
+	MaxMemoryBurstiness float64 `json:"max_memory_burstiness"`
 }
 
 // Validate checks a configuration for internal consistency before any work is
@@ -130,6 +160,9 @@ func (c *Config) Validate() error {
 	}
 	if c.EvaluationHorizon.D() <= 0 {
 		return fmt.Errorf("%s: evaluation_horizon must be positive; scoring on the fitting window is not a valid evaluation", c.Name)
+	}
+	if c.DeclaredCPUScale < 0 || c.DeclaredMemoryScale < 0 {
+		return fmt.Errorf("%s: declared resource scales must be non-negative", c.Name)
 	}
 	longest := time.Duration(0)
 	for _, w := range c.ObservationWindows.Std() {
@@ -204,4 +237,17 @@ func (c *Config) memorySafetyFactors() []float64 {
 		return c.MemorySafetyFactors
 	}
 	return nil // signals "mirror the CPU factor"
+}
+
+// declaredScales resolves the declared-request multipliers, treating zero as 1.0
+// so that an omitted field means "use the catalog value unchanged".
+func (c *Config) declaredScales() (cpu, mem float64) {
+	cpu, mem = c.DeclaredCPUScale, c.DeclaredMemoryScale
+	if cpu == 0 {
+		cpu = 1.0
+	}
+	if mem == 0 {
+		mem = 1.0
+	}
+	return cpu, mem
 }

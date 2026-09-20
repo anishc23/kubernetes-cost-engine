@@ -1,0 +1,7 @@
+Declared memory request against true demand for each workload class, median over
+10 trace realisations, log scale. Annotations give the ratio of the declared request to
+true maximum demand. The spread — from 1.8x to 10.9x — shows that
+"how much waste exists" has no single answer even across a controlled set of workloads, and
+that the reference statistic chosen changes the answer substantially: the spiky-cpu class is
+4x its p99 demand but only
+3.5x its maximum.

@@ -1,0 +1,12 @@
+Every (CPU strategy, memory strategy, CPU margin, memory margin) configuration, positioned
+by its median savings across all workload classes and 10 realisations, against the fraction
+of conditions that violated the reliability constraint. Colour separates out how much of
+that risk was memory failure rather than CPU degradation. The step line connects the
+configurations that no lower-risk configuration matches.
+
+The frontier is steep at the safe end. The best configuration that was feasible on *every*
+class and seed reaches 31% savings, against 78% for the most
+aggressive configuration overall — so the price of universal safety in this workload
+population is roughly 47 percentage points. Most of the space is
+dominated, which is the practically useful content of the figure: the real choice is among
+the handful of frontier points, not among all 196 configurations.

@@ -1,0 +1,108 @@
+{{- include "k8s-cost-optimizer.validate" . }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "k8s-cost-optimizer.fullname" . }}
+  labels:
+    {{- include "k8s-cost-optimizer.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  # Recreate rather than RollingUpdate: two optimizers analysing the same cluster
+  # would double every Prometheus query for no benefit, and in apply mode could
+  # race on the same workload. The analysis is a background loop, so a few
+  # seconds of unavailability during an upgrade costs nothing.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "k8s-cost-optimizer.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      annotations:
+        # Roll the pod when the configuration changes. Without this, a `helm
+        # upgrade` that only alters values would update the ConfigMap and leave
+        # the running pod on the old configuration indefinitely.
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      labels:
+        {{- include "k8s-cost-optimizer.selectorLabels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "k8s-cost-optimizer.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: optimizer
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args:
+            - --config=/etc/optimizer/config.yaml
+          ports:
+            - name: http
+              containerPort: {{ .Values.service.port }}
+              protocol: TCP
+            - name: metrics
+              containerPort: {{ .Values.service.metricsPort }}
+              protocol: TCP
+          # Liveness checks the process only. A liveness probe that failed when
+          # Prometheus was unreachable would restart a healthy optimizer and turn
+          # a dependency outage into a crash loop, making recovery slower.
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 20
+            timeoutSeconds: 3
+            failureThreshold: 3
+          # Readiness checks dependencies and whether an analysis cycle has
+          # completed, so the Service does not route to a pod that would answer
+          # with an empty result set.
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 15
+            timeoutSeconds: 5
+            # Generous: the first cycle must discover every workload and query
+            # Prometheus for each, which on a large cluster takes minutes.
+            failureThreshold: 30
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            - name: config
+              mountPath: /etc/optimizer
+              readOnly: true
+            # A writable /tmp is required because the root filesystem is
+            # read-only and Go's runtime may need scratch space.
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: config
+          configMap:
+            name: {{ include "k8s-cost-optimizer.fullname" . }}
+        - name: tmp
+          emptyDir: {}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

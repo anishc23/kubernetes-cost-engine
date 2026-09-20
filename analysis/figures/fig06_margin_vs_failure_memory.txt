@@ -1,0 +1,9 @@
+Memory savings and survival against the safety factor, over 5 realisations per condition.
+Survival is the fraction of conditions that completed the held-out horizon with zero
+OOMKills.
+
+The max policy reaches full survival at a 1.2x margin. The p95 policy does not: it plateaus
+at 90% and stays there even at a 2.0x margin. The reason is structural
+rather than statistical — on the bursty-memory class the p95 of the working set is a small
+fraction of its peak, so no multiplier applied to p95 reaches the peak. A safety margin
+cannot repair a statistic that systematically excludes the event it needs to cover.
