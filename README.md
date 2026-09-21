@@ -151,6 +151,29 @@ Every recommendation carries its evidence:
 `BLOCKED` still reports the target the statistics produced, so the gate's effect is
 measurable rather than invisible.
 
+### The dashboard
+
+![Grafana dashboard showing cost, recommendation decisions and optimizer health](docs/images/grafana-dashboard.png)
+
+A live capture from the local `kind` stack (`make kind-up`), not a mock-up. Three
+things on it are worth pointing out, because they are what the engine is trying to
+tell an operator:
+
+- **`INSUFFICIENT_DATA` is 42% of CPU decisions here**, and that is the dashboard
+  working. The cluster had been running about half an hour against a 30-minute
+  window, so for many containers the engine correctly declined to make a claim
+  rather than producing a confident number from a handful of samples.
+- **Safety gates fired** shows *which* rule withheld a recommendation. A rise in
+  `oom-protection` means workloads started being killed; a rise in
+  `data-sufficiency`, as here, usually means the metrics pipeline is thin or new —
+  a distinction that is invisible if you only plot savings.
+- **Time since last successful analysis** is given its own panel because a stale
+  recommendation describes a cluster that no longer exists. It is the first thing
+  to alert on.
+
+The dashboard JSON lives in [`dashboards/`](dashboards/) and the Helm chart can
+provision it into an existing Grafana with `grafanaDashboard.enabled=true`.
+
 ---
 
 ## Quick start

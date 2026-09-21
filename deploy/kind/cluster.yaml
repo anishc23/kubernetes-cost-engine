@@ -22,3 +22,7 @@ nodes:
       - containerPort: 30080
         hostPort: 30080
         protocol: TCP
+      # Grafana.
+      - containerPort: 30030
+        hostPort: 30030
+        protocol: TCP

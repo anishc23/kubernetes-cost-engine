@@ -32,6 +32,15 @@ docker build -q -f "$ROOT/cmd/workload-gen/Dockerfile" \
   -t k8s-cost-optimizer/workload-gen:dev "$ROOT" >/dev/null
 kind load docker-image k8s-cost-optimizer/workload-gen:dev --name "$CLUSTER"
 
+log "deploying Grafana with the repository's dashboard"
+# The dashboard ConfigMap is generated from the file in dashboards/, so the
+# committed JSON is what renders and there is no second copy to drift.
+kubectl -n monitoring create configmap grafana-dashboards \
+  --from-file="$ROOT/dashboards/k8s-cost-optimizer.json" \
+  --dry-run=client -o yaml | kubectl apply -f -
+kubectl apply -f "$ROOT/deploy/kind/grafana.yaml"
+kubectl -n monitoring rollout status deploy/grafana --timeout=180s
+
 log "deploying demo workloads"
 kubectl apply -f "$ROOT/examples/workloads/demo-workloads.yaml"
 kubectl -n demo wait --for=condition=available --timeout=180s deploy --all
@@ -57,6 +66,7 @@ cat <<EOF
 Cluster '$CLUSTER' is ready.
 
   Prometheus:  http://localhost:30090
+  Grafana:     http://localhost:30030   (anonymous admin; kind only)
   Workloads:   kubectl -n demo get pods
 
 Next:
